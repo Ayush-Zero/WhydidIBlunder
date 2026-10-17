@@ -120,24 +120,34 @@ def analyze_game(
                 rank = idx + 1
                 break
 
-        # Reasonable-alternative suppression (precedence #2).
+        # Precedence #2: suppression. A forced move and the engine's own best
+        # move can never be a mistake. Everything else is judged purely on the
+        # win% gap to the best line — rank 2-3 is NOT a reason to suppress, since
+        # the second-best line can be far worse than the first (see plan.md).
+        forced = pos.legal_moves.count() == 1
         suppressed = False
         reason = ""
-        if rank is not None and rank <= 3:
-            suppressed, reason = True, f"top-3 (#{rank})"
-        if drop <= SUPPRESS_WIN_PTS:
+        if forced:
+            suppressed, reason = True, "forced"
+        elif rank == 1:
+            suppressed, reason = True, "best move"
+        elif drop <= SUPPRESS_WIN_PTS:
             suppressed, reason = True, "~= best"
 
-        # Informational mate tags (precedence #1) — never counted as blunders.
+        # Precedence #1: informational mate tags. Recorded as tags, but they do
+        # NOT suppress a win%-threshold classification — walking into a forced
+        # mate from a playable position is a real blunder. Forced moves get no
+        # tag: there was no choice to make.
         after_info = analyses[i + 1][0] if analyses[i + 1] else None
         after_is_mating = after_board.is_checkmate() or (
             after_info is not None and _is_mating(after_info, mover)
         )
         tags: list[str] = []
-        if _is_mating(before_lines[0], mover) and not after_is_mating:
-            tags.append("missed_mate")
-        if after_info is not None and _is_mated(after_info, mover):
-            tags.append("allowed_mate")
+        if not forced:
+            if _is_mating(before_lines[0], mover) and not after_is_mating:
+                tags.append("missed_mate")
+            if after_info is not None and _is_mated(after_info, mover):
+                tags.append("allowed_mate")
 
         played_san = pos.copy().san(mv)
         best_move = before_lines[0]["pv"][0]
