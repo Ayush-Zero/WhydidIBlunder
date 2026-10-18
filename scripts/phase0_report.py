@@ -89,6 +89,18 @@ def select_game_text(text: str, game_index: int) -> str:
     raise SystemExit(f"no game at index {game_index}")
 
 
+def color_of(game: chess.pgn.Game, me: str | None) -> str | None:
+    """Which side did ``me`` play? None if unknown."""
+    if not me:
+        return None
+    me_l = me.lower()
+    if game.headers.get("White", "").lower() == me_l:
+        return "white"
+    if game.headers.get("Black", "").lower() == me_l:
+        return "black"
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # output
 # --------------------------------------------------------------------------- #
@@ -129,7 +141,7 @@ def print_summary(reports: list[MoveReport], color: str) -> None:
         print(f"  {'accuracy':<11} {acc:.1f}")
 
 
-def print_batch(rows: list[dict], color: str) -> None:
+def print_batch(rows: list[dict]) -> None:
     header = (
         f"{'#':>3}  {'white':<22}  {'black':<22}  {'res':>4}  {'you':>4}  "
         f"{'acc':>5}  {'bl':>3}  {'mi':>3}  {'in':>3}"
@@ -171,7 +183,8 @@ def run_single(text: str, engine: Engine, depth: int, multipv: int,
     print_summary(reports, color)
 
 
-def run_batch(text: str, engine: Engine, depth: int, multipv: int, color: str) -> None:
+def run_batch(text: str, engine: Engine, depth: int, multipv: int, color: str,
+              me: str | None = None) -> None:
     rows = []
     for i, game in enumerate(iter_games(text)):
         if not list(game.mainline_moves()):
@@ -179,7 +192,9 @@ def run_batch(text: str, engine: Engine, depth: int, multipv: int, color: str) -
         white = game.headers.get("White", "?")
         black = game.headers.get("Black", "?")
         result = game.headers.get("Result", "?")
-        print(f"analysing game {i}: {white} vs {black} ...", flush=True)
+        game_color = color_of(game, me) or color
+        print(f"analysing game {i}: {white} vs {black} (you={game_color}) ...",
+              flush=True)
         reports = analyze_game(
             game.accept(_EXPORTER), engine=engine, depth=depth, multipv=multipv
         )
@@ -189,13 +204,13 @@ def run_batch(text: str, engine: Engine, depth: int, multipv: int, color: str) -
                 "white": white,
                 "black": black,
                 "result": result,
-                "you_moves": sum(1 for r in reports if r.side == color),
-                "counts": count_flags(reports, color),
-                "accuracy": game_accuracy(reports, color),
+                "you_moves": sum(1 for r in reports if r.side == game_color),
+                "counts": count_flags(reports, game_color),
+                "accuracy": game_accuracy(reports, game_color),
             }
         )
     print()
-    print_batch(rows, color)
+    print_batch(rows)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -205,6 +220,9 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--pgn", type=str, help="inline PGN text")
     parser.add_argument("--color", choices=["white", "black", "both"], default="both",
                         help="which side is 'you' (default: both)")
+    parser.add_argument("--me", default=None,
+                        help="your Chess.com username; detect your side per game "
+                             "(overrides --color; needed when you play both colours)")
     parser.add_argument("--all-games", action="store_true",
                         help="sweep every game in the file -> per-game summary")
     parser.add_argument("--game-index", type=int, default=0,
@@ -219,8 +237,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="path to the Stockfish binary (default from .env)")
     args = parser.parse_args(argv)
 
-    if args.all_games and args.color == "both":
-        parser.error("--all-games needs --color white or --color black")
+    if args.all_games and args.color == "both" and not args.me:
+        parser.error("--all-games needs --color white/black, or --me <username>")
 
     depth = args.depth if args.depth is not None else analysis_depth()
     multipv = args.multipv if args.multipv is not None else analysis_multipv()
@@ -235,8 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         pgn_text = args.pgn_file.read_text(encoding="utf-8")
 
     print(f"Stockfish: {engine_path}")
-    print(f"depth={depth}  multipv={multipv}  color={args.color}  "
-          f"perspective=each mover")
+    who = f"you={args.me}" if args.me else f"color={args.color}"
+    print(f"depth={depth}  multipv={multipv}  {who}  perspective=each mover")
     print()
 
     try:
@@ -245,11 +263,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"engine: {engine.name}")
             print()
             if args.all_games:
-                run_batch(pgn_text, engine, depth, multipv, args.color)
+                run_batch(pgn_text, engine, depth, multipv, args.color, args.me)
             else:
+                text = select_game_text(pgn_text, args.game_index)
+                color = args.color
+                if args.me:
+                    game = chess.pgn.read_game(io.StringIO(text))
+                    color = color_of(game, args.me) or color
                 run_single(
-                    select_game_text(pgn_text, args.game_index),
-                    engine, depth, multipv, args.color, args.only_flags,
+                    text, engine, depth, multipv, color, args.only_flags,
                 )
     except FileNotFoundError:
         print(

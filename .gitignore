@@ -36,6 +36,9 @@ coverage.xml
 *.db-wal
 *.db-shm
 
+# ---- Local runtime data (fetched PGNs, caches) ----
+data/
+
 # ---- Engine binaries (large; not tracked) ----
 stockfish
 stockfish.exe
