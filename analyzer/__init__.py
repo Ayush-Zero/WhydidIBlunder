@@ -1,19 +1,35 @@
 """WhydidIBlunder analyzer core.
 
-Phase 0: a minimal, dependency-light pipeline that turns a PGN into a per-move
-report. Phase 1 will grow this (rule tags, phase detection, deterministic
-fixtures) without changing the public surface: ``analyze_game``.
+The public surface is :func:`analyzer.report.analyze_game`, which returns the
+stable, JSON-serialisable report dict described in ``docs/analyzer-schema.md``.
+
+Phase 1 keeps the public surface frozen while the internals are hardened
+(perspective normalisation, rule tags, phase detection, deterministic fixtures).
 """
 
 from .engine import Engine, mate_to_cp
-from .pipeline import MoveReport, analyze_game
+from .pipeline import MoveReport, analyse_game_moves, analyse_moves, read_game
+from .report import (
+    SCHEMA_VERSION,
+    analyze_game,
+    build_report,
+    summarize,
+    validate_report,
+)
 from .winpct import accuracy_from_win_diff, classify, win_pct
 
 __all__ = [
     "Engine",
     "mate_to_cp",
     "MoveReport",
+    "read_game",
+    "analyse_game_moves",
+    "analyse_moves",
+    "SCHEMA_VERSION",
     "analyze_game",
+    "build_report",
+    "summarize",
+    "validate_report",
     "accuracy_from_win_diff",
     "classify",
     "win_pct",

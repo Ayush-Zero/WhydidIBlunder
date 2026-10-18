@@ -35,7 +35,7 @@ from analyzer.config import (  # noqa: E402
     stockfish_threads,
 )
 from analyzer.engine import MATE_CP, Engine  # noqa: E402
-from analyzer.pipeline import MoveReport, analyze_game  # noqa: E402
+from analyzer.pipeline import MoveReport, analyse_moves  # noqa: E402
 from analyzer.winpct import accuracy_from_win_diff  # noqa: E402
 
 FLAG_ORDER = ["blunder", "mistake", "inaccuracy"]
@@ -177,7 +177,7 @@ def print_batch(rows: list[dict]) -> None:
 # --------------------------------------------------------------------------- #
 def run_single(text: str, engine: Engine, depth: int, multipv: int,
                color: str, only_flags: bool) -> None:
-    reports = analyze_game(text, engine=engine, depth=depth, multipv=multipv)
+    reports = analyse_moves(text, engine=engine, depth=depth, multipv=multipv)
     shown = [r for r in reports if r.classification != "ok"] if only_flags else reports
     print_table(shown, color)
     print_summary(reports, color)
@@ -195,7 +195,7 @@ def run_batch(text: str, engine: Engine, depth: int, multipv: int, color: str,
         game_color = color_of(game, me) or color
         print(f"analysing game {i}: {white} vs {black} (you={game_color}) ...",
               flush=True)
-        reports = analyze_game(
+        reports = analyse_moves(
             game.accept(_EXPORTER), engine=engine, depth=depth, multipv=multipv
         )
         rows.append(

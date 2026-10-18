@@ -1,4 +1,4 @@
-"""Turn a PGN into a per-move report.
+"""Turn a PGN into per-move reports.
 
 Perspective rule (the #1 bug source): every eval is normalized to the **mover's**
 point of view at the single point it enters this module. The position *after* a
@@ -20,14 +20,19 @@ from .winpct import SUPPRESS_WIN_PTS, classify, win_pct
 
 @dataclass
 class MoveReport:
+    """One analysed ply. Units and point-of-view are documented in
+    ``docs/analyzer-schema.md``."""
+
     ply: int
     move_number: int
     side: str  # "white" / "black"
     played_san: str
     best_san: str
-    eval_before_cp: int
-    eval_after_cp: int
-    drop: float  # win%-points
+    eval_before_cp: int  # centipawns, mover's POV (mates via MATE_CP)
+    eval_after_cp: int  # centipawns, mover's POV
+    mate_before: int | None  # signed mate distance in moves, mover's POV
+    mate_after: int | None
+    drop: float  # win%-points; positive = worse for the mover
     classification: str
     played_rank: int | None
     suppressed: bool
@@ -36,13 +41,25 @@ class MoveReport:
     pv_san: list[str] = field(default_factory=list)
 
 
-def _score_cp(info: dict, pov: chess.Color) -> int:
-    """Centipawns for ``info`` as seen by ``pov`` (mates encoded via MATE_CP)."""
+def read_game(pgn_text: str) -> chess.pgn.Game:
+    """Parse the first game in ``pgn_text``; raise ``ValueError`` if there is none."""
+    game = chess.pgn.read_game(io.StringIO(pgn_text))
+    if game is None:
+        raise ValueError("No game found in the PGN text")
+    return game
+
+
+def _score(info: dict, pov: chess.Color) -> tuple[int, int | None]:
+    """``(centipawns, mate_in)`` for ``info`` as seen by ``pov``.
+
+    Mates are encoded via :data:`MATE_CP` so they saturate :func:`win_pct`, and
+    the signed mate distance is returned separately so M1 and M3 stay distinct.
+    """
     sc = info["score"].pov(pov)
     if sc.is_mate():
-        return mate_to_cp(sc.mate())
+        return mate_to_cp(sc.mate()), sc.mate()
     cp = sc.score()
-    return 0 if cp is None else cp
+    return (0 if cp is None else cp), None
 
 
 def _side_name(color: chess.Color) -> str:
@@ -59,22 +76,18 @@ def _is_mated(info: dict, pov: chess.Color) -> bool:
     return sc.is_mate() and sc.mate() < 0
 
 
-def analyze_game(
-    pgn_text: str,
+def analyse_game_moves(
+    game: chess.pgn.Game,
     *,
     engine: Engine,
     depth: int = 16,
     multipv: int = 4,
 ) -> list[MoveReport]:
-    """Analyse every move of the first game in ``pgn_text``.
+    """Analyse every move of ``game``.
 
     Each position is searched once and reused as the next move's "before"
     (halves the work). Classification is from the mover's perspective.
     """
-    game = chess.pgn.read_game(io.StringIO(pgn_text))
-    if game is None:
-        raise ValueError("No game found in the PGN text")
-
     moves = list(game.mainline_moves())
 
     board = game.board()
@@ -97,18 +110,18 @@ def analyze_game(
         before_lines = analyses[i]
         after_board = boards[i + 1]
 
-        before_cp = _score_cp(before_lines[0], mover)
+        before_cp, mate_before = _score(before_lines[0], mover)
         # "After" has the opponent to move -> convert to the mover's POV.
         # Terminal positions are not sent to the engine: a delivered checkmate is
         # the best possible outcome for the mover (max), any other game-over is a
         # draw. Without this, Stockfish's "mate 0" on a mated position is read as
         # the mover being mated, mislabelling the checkmating move as a blunder.
         if after_board.is_checkmate():
-            after_cp = mate_to_cp(1)
+            after_cp, mate_after = mate_to_cp(1), 1
         elif after_board.is_game_over():
-            after_cp = 0
+            after_cp, mate_after = 0, None
         else:
-            after_cp = _score_cp(analyses[i + 1][0], mover)
+            after_cp, mate_after = _score(analyses[i + 1][0], mover)
 
         drop = win_pct(before_cp) - win_pct(after_cp)
 
@@ -168,6 +181,8 @@ def analyze_game(
                 best_san=best_san,
                 eval_before_cp=before_cp,
                 eval_after_cp=after_cp,
+                mate_before=mate_before,
+                mate_after=mate_after,
                 drop=drop,
                 classification=classify(drop, suppressed),
                 played_rank=rank,
@@ -179,3 +194,16 @@ def analyze_game(
         )
 
     return reports
+
+
+def analyse_moves(
+    pgn_text: str,
+    *,
+    engine: Engine,
+    depth: int = 16,
+    multipv: int = 4,
+) -> list[MoveReport]:
+    """Convenience: parse the first game in ``pgn_text`` and analyse its moves."""
+    return analyse_game_moves(
+        read_game(pgn_text), engine=engine, depth=depth, multipv=multipv
+    )
