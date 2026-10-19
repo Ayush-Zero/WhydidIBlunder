@@ -9,6 +9,7 @@ Phase 1 keeps the public surface frozen while the internals are hardened
 
 from .engine import Engine, mate_to_cp
 from .pipeline import MoveReport, analyse_game_moves, analyse_moves, read_game
+from .pov import to_mover_pov
 from .report import (
     SCHEMA_VERSION,
     analyze_game,
@@ -21,6 +22,7 @@ from .winpct import accuracy_from_win_diff, classify, win_pct
 __all__ = [
     "Engine",
     "mate_to_cp",
+    "to_mover_pov",
     "MoveReport",
     "read_game",
     "analyse_game_moves",

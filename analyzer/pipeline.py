@@ -1,9 +1,9 @@
 """Turn a PGN into per-move reports.
 
 Perspective rule (the #1 bug source): every eval is normalized to the **mover's**
-point of view at the single point it enters this module. The position *after* a
-move has the opponent to move, so we convert with ``score.pov(mover)`` rather
-than trusting the default side-to-move point of view.
+point of view at the single point it enters the pipeline —
+:func:`analyzer.pov.to_mover_pov`. This module never reads a raw engine score
+otherwise; ``tests/test_pov.py`` enforces that.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import chess
 import chess.pgn
 
 from .engine import Engine, mate_to_cp
+from .pov import to_mover_pov
 from .winpct import SUPPRESS_WIN_PTS, classify, win_pct
 
 
@@ -49,17 +50,9 @@ def read_game(pgn_text: str) -> chess.pgn.Game:
     return game
 
 
-def _score(info: dict, pov: chess.Color) -> tuple[int, int | None]:
-    """``(centipawns, mate_in)`` for ``info`` as seen by ``pov``.
-
-    Mates are encoded via :data:`MATE_CP` so they saturate :func:`win_pct`, and
-    the signed mate distance is returned separately so M1 and M3 stay distinct.
-    """
-    sc = info["score"].pov(pov)
-    if sc.is_mate():
-        return mate_to_cp(sc.mate()), sc.mate()
-    cp = sc.score()
-    return (0 if cp is None else cp), None
+def _mate_of(info: dict, pov: chess.Color) -> int | None:
+    """Signed mate distance (mover's POV) for ``info``; ``None`` if no mate."""
+    return to_mover_pov(info["score"], pov)[1]
 
 
 def _side_name(color: chess.Color) -> str:
@@ -67,13 +60,13 @@ def _side_name(color: chess.Color) -> str:
 
 
 def _is_mating(info: dict, pov: chess.Color) -> bool:
-    sc = info["score"].pov(pov)
-    return sc.is_mate() and sc.mate() > 0
+    mate = _mate_of(info, pov)
+    return mate is not None and mate > 0
 
 
 def _is_mated(info: dict, pov: chess.Color) -> bool:
-    sc = info["score"].pov(pov)
-    return sc.is_mate() and sc.mate() < 0
+    mate = _mate_of(info, pov)
+    return mate is not None and mate < 0
 
 
 def analyse_game_moves(
@@ -110,7 +103,7 @@ def analyse_game_moves(
         before_lines = analyses[i]
         after_board = boards[i + 1]
 
-        before_cp, mate_before = _score(before_lines[0], mover)
+        before_cp, mate_before = to_mover_pov(before_lines[0]["score"], mover)
         # "After" has the opponent to move -> convert to the mover's POV.
         # Terminal positions are not sent to the engine: a delivered checkmate is
         # the best possible outcome for the mover (max), any other game-over is a
@@ -121,7 +114,7 @@ def analyse_game_moves(
         elif after_board.is_game_over():
             after_cp, mate_after = 0, None
         else:
-            after_cp, mate_after = _score(analyses[i + 1][0], mover)
+            after_cp, mate_after = to_mover_pov(analyses[i + 1][0]["score"], mover)
 
         drop = win_pct(before_cp) - win_pct(after_cp)
 
