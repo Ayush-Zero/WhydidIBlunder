@@ -32,7 +32,7 @@ refactor can be verified in one command.
 
 ---
 
-## Milestone B — Pure-logic units, offline TDD (≈ 1 day)
+## Milestone B — Pure-logic units, offline TDD (≈ 1 day) — ✅ done
 
 All of these run with **no engine** and are unit-testable in isolation. They can
 be built in parallel by separate people (or separate sittings).
@@ -45,6 +45,13 @@ be built in parallel by separate people (or separate sittings).
 | **B4** | Accuracy metric | `acc = clamp(103.1668·e^(−0.04354·winDiff) − 3.1669, 0, 100)`, winDiff in **win%-points** | Boundary tests (0, 100, mid) + game-mean test; units documented |
 | **B5** | Phase detection | Opening / middlegame / endgame from ply + material heuristics | Crafted positions map to expected phase; no engine needed |
 | **B6** | Rule-based tags | `hanging_piece`, `missed_capture`, `fork`, `pin` (plus existing `missed_mate`, `allowed_mate`) | Each tag is a pure function with a true **and** a false test case |
+
+> **Open integration note (post-B6):** the four new rule tags
+> (`hanging_piece`, `missed_capture`, `fork`, `pin`) live in `analyzer/tags.py`
+> with full offline tests, but are **not yet wired into `analyse_game_moves`**.
+> Wiring them makes them appear in real reports (a product/noise decision) and
+> should be done together with the C2/C4 golden-fixture regeneration so the
+> frozen fixture captures the new tags. Left for Milestone C.
 
 ---
 
