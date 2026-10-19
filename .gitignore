@@ -62,6 +62,9 @@ pnpm-debug.log*
 # ---- Session logs (local conversation / brief files) ----
 opencode/
 
+# ---- Local planning notes (not published) ----
+plan.md
+
 # ---- IDE / editor ----
 .vscode/
 !.vscode/extensions.json
