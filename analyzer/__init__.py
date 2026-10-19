@@ -19,6 +19,7 @@ from .report import (
     validate_report,
 )
 from .terminal import terminal_eval
+from .tags import fork, hanging_piece, missed_capture, pin
 from .winpct import Thresholds, Verdict, accuracy_from_win_diff, classify, judge, win_pct
 
 __all__ = [
@@ -29,6 +30,10 @@ __all__ = [
     "PHASES",
     "detect_phase",
     "non_pawn_material",
+    "hanging_piece",
+    "missed_capture",
+    "fork",
+    "pin",
     "MoveReport",
     "read_game",
     "analyse_game_moves",
