@@ -11,6 +11,26 @@ fixtures, so it runs anywhere in about a second:
 
 Anything that needs a real engine is opt-in — see *The opt-in live test* below.
 
+## The opt-in live test
+
+`tests/test_live_engine.py` is marked `@pytest.mark.live` and launches a real
+Stockfish binary. It is **deselected by default** (`addopts = -m "not live"` in
+`pytest.ini`), and `tests/conftest.py` additionally skips it unless
+`RUN_LIVE_TESTS=1` is set — so a plain `pytest` run never touches the engine.
+
+It checks **plumbing only**: the engine starts and returns a score, MultiPV
+returns the requested number of lines, and `analyze_game` produces a
+schema-valid, JSON-serialisable report. It never asserts *which* moves are
+flagged.
+
+```powershell
+$env:RUN_LIVE_TESTS='1'
+.\.venv\Scripts\python.exe -m pytest -m live
+Remove-Item Env:RUN_LIVE_TESTS   # back to offline
+```
+
+Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
+
 ## What the suite protects
 
 | Layer | File | Guards against |
@@ -19,6 +39,7 @@ Anything that needs a real engine is opt-in — see *The opt-in live test* below
 | Engine wiring | `tests/test_engine_reuse.py` | a re-search creeping back in (2n engine calls instead of n+1) and settings going hardcoded |
 | Frozen fixture, self-consistency | `tests/test_report.py` | a report that no longer recomputes from its own evals |
 | Frozen fixture, exact flags | `tests/test_golden_game.py` | a *silently* different verdict on the sample game |
+| Live smoke (opt-in) | `tests/test_live_engine.py` | the engine plumbing breaking (start, score, valid report) — never the classification |
 
 ## The golden fixture
 
