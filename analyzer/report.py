@@ -132,6 +132,12 @@ def analyze_game(
     ``color`` must be ``"white"`` or ``"black"`` — it selects whose moves the
     summary covers. If no ``engine`` is supplied, one is launched from config and
     closed on exit. ``depth``/``multipv`` default to the configured values.
+
+    The labels and ``summary.accuracy`` are our own win%-based model (a
+    Lichess-style curve plus win%-point thresholds). They are close in spirit to
+    Chess.com's numbers but are **not** guaranteed to match them, and a shallower
+    depth will disagree with a deeper one on sharp positions. The returned dict
+    is JSON-serialisable.
     """
     color = (color or "").lower()
     if color not in SIDES:

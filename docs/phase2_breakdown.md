@@ -1,8 +1,8 @@
 # Phase 2 — API + Worker: Work Breakdown
 
-> Companion to `plan.md`. Phase 2 turns the Phase 1 `analyzer` into a running
-> **service**: FastAPI + a separate worker process + SQLite (WAL) + native
-> Stockfish. Still **no frontend**.
+> Companion to the project plan. Phase 2 turns the Phase 1 `analyzer` into a
+> running **service**: FastAPI + a separate worker process + SQLite (WAL) +
+> native Stockfish. Still **no frontend**.
 
 ## Guiding principles (why the work is split this way)
 

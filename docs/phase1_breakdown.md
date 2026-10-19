@@ -1,8 +1,8 @@
 # Phase 1 — Analyzer Core: Work Breakdown
 
-> Companion to `plan.md`. Phase 1 turns the **Phase 0 prototype** into a
-> hardened, tested, dependency-free `analyzer/` package with a **frozen public
-> API**. No web, no DB.
+> Phase 1 turns the **Phase 0 prototype** into a hardened, tested,
+> dependency-free `analyzer/` package with a **frozen public API**. No web, no
+> DB.
 
 ## Guiding principles (why the work is split this way)
 
@@ -46,16 +46,16 @@ be built in parallel by separate people (or separate sittings).
 | **B5** | Phase detection | Opening / middlegame / endgame from ply + material heuristics | Crafted positions map to expected phase; no engine needed |
 | **B6** | Rule-based tags | `hanging_piece`, `missed_capture`, `fork`, `pin` (plus existing `missed_mate`, `allowed_mate`) | Each tag is a pure function with a true **and** a false test case |
 
-> **Open integration note (post-B6):** the four new rule tags
-> (`hanging_piece`, `missed_capture`, `fork`, `pin`) live in `analyzer/tags.py`
-> with full offline tests, but are **not yet wired into `analyse_game_moves`**.
-> Wiring them makes them appear in real reports (a product/noise decision) and
-> should be done together with the C2/C4 golden-fixture regeneration so the
-> frozen fixture captures the new tags. Left for Milestone C.
+> **Rule tags are wired (C2).** The four rule tags (`hanging_piece`,
+> `missed_capture`, `fork`, `pin`) live in `analyzer/tags.py` and are now
+> surfaced by `analyse_game_moves`. They annotate a **flagged** move only
+> (classification ≠ `ok`): the predicates are intentionally loose, so showing
+> them on good moves — including a mating move — was unusable. The frozen
+> fixture captures them.
 
 ---
 
-## Milestone C — Engine integration & determinism (≈ 1 day)
+## Milestone C — Engine integration & determinism (≈ 1 day) — ✅ done
 
 | ID | Part | What it is | Done when |
 |----|------|-----------|-----------|
@@ -68,12 +68,12 @@ be built in parallel by separate people (or separate sittings).
 
 ## Definition of Done for Phase 1
 
-- [ ] `pytest` passes **offline** (pure-logic + golden fixture).
-- [ ] `pytest -m live` runs the plumbing smoke test (opt-in).
-- [ ] `analyze_game(pgn, color) -> dict` is stable, documented, and JSON-serialisable.
-- [ ] Thresholds, depth, and multipv come from config — nothing hardcoded.
-- [ ] Every rule/tag has a deterministic unit test.
-- [ ] A2 baseline and C2 golden fixture both pass (no silent drift).
+- [x] `pytest` passes **offline** (pure-logic + golden fixture).
+- [x] `RUN_LIVE_TESTS=1 pytest -m live` runs the plumbing smoke test (opt-in).
+- [x] `analyze_game(pgn, color) -> dict` is stable, documented, and JSON-serialisable.
+- [x] Thresholds, depth, and multipv come from config — nothing hardcoded.
+- [x] Every rule/tag has a deterministic unit test.
+- [x] A2 baseline and C2 golden fixture both pass (no silent drift).
 
 ---
 
