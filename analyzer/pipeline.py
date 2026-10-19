@@ -14,10 +14,11 @@ from dataclasses import dataclass, field
 import chess
 import chess.pgn
 
+from .config import analysis_thresholds, suppression_win_pts
 from .engine import Engine
 from .pov import to_mover_pov
 from .terminal import terminal_eval
-from .winpct import SUPPRESS_WIN_PTS, classify, win_pct
+from .winpct import judge, win_pct
 
 
 @dataclass
@@ -69,6 +70,10 @@ def analyse_game_moves(
     """
     moves = list(game.mainline_moves())
 
+    # Classification cut-offs, from config (env-overridable) — read once.
+    thresholds = analysis_thresholds()
+    suppress = suppression_win_pts()
+
     board = game.board()
     boards = [board.copy()]
     for mv in moves:
@@ -110,19 +115,17 @@ def analyse_game_moves(
                 rank = idx + 1
                 break
 
-        # Precedence #2: suppression. A forced move and the engine's own best
-        # move can never be a mistake. Everything else is judged purely on the
-        # win% gap to the best line — rank 2-3 is NOT a reason to suppress, since
-        # the second-best line can be far worse than the first (see plan.md).
+        # Precedence ladder (winpct.judge): forced -> best/~=best -> thresholds.
+        # Rank 2-3 is deliberately NOT a suppression reason — the second-best
+        # line can be far worse than the first, hiding real blunders (see plan.md).
         forced = pos.legal_moves.count() == 1
-        suppressed = False
-        reason = ""
-        if forced:
-            suppressed, reason = True, "forced"
-        elif rank == 1:
-            suppressed, reason = True, "best move"
-        elif drop <= SUPPRESS_WIN_PTS:
-            suppressed, reason = True, "~= best"
+        verdict = judge(
+            drop,
+            forced=forced,
+            rank=rank,
+            thresholds=thresholds,
+            suppress=suppress,
+        )
 
         # Precedence #1: informational mate tags. Recorded as tags, but they do
         # NOT suppress a win%-threshold classification — walking into a forced
@@ -159,10 +162,10 @@ def analyse_game_moves(
                 mate_before=mate_before,
                 mate_after=mate_after,
                 drop=drop,
-                classification=classify(drop, suppressed),
+                classification=verdict.classification,
                 played_rank=rank,
-                suppressed=suppressed,
-                suppress_reason=reason,
+                suppressed=verdict.suppressed,
+                suppress_reason=verdict.reason,
                 tags=tags,
                 pv_san=pv_san,
             )

@@ -18,7 +18,7 @@ from .report import (
     validate_report,
 )
 from .terminal import terminal_eval
-from .winpct import accuracy_from_win_diff, classify, win_pct
+from .winpct import Thresholds, Verdict, accuracy_from_win_diff, classify, judge, win_pct
 
 __all__ = [
     "Engine",
@@ -36,5 +36,8 @@ __all__ = [
     "validate_report",
     "accuracy_from_win_diff",
     "classify",
+    "judge",
+    "Thresholds",
+    "Verdict",
     "win_pct",
 ]
