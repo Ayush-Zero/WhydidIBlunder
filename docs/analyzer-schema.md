@@ -110,7 +110,15 @@ lets the opponent force mate.
 | `ok` | int ≥ 0 | idem |
 
 `accuracy` is a Lichess-style expectation-based score and is **not** guaranteed to
-match Chess.com's number.
+match Chess.com's number. It is computed per move as
+
+```
+acc = clamp(103.1668 * exp(-0.04354 * winDiff) - 3.1669, 0, 100)
+```
+
+where `winDiff` is the move's `drop_win_pct` in **win%-points** (never
+centipawns — feeding cp into the formula yields garbage). `summary.accuracy` is
+the arithmetic mean over `user_color`'s moves, rounded to one decimal.
 
 ## Guarantees the validator enforces
 
