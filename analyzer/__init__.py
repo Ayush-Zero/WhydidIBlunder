@@ -8,6 +8,7 @@ Phase 1 keeps the public surface frozen while the internals are hardened
 """
 
 from .engine import Engine, mate_to_cp
+from .phase import PHASES, detect_phase, non_pawn_material
 from .pipeline import MoveReport, analyse_game_moves, analyse_moves, read_game
 from .pov import to_mover_pov
 from .report import (
@@ -25,6 +26,9 @@ __all__ = [
     "mate_to_cp",
     "to_mover_pov",
     "terminal_eval",
+    "PHASES",
+    "detect_phase",
+    "non_pawn_material",
     "MoveReport",
     "read_game",
     "analyse_game_moves",
