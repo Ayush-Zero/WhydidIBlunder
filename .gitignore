@@ -59,6 +59,9 @@ pnpm-debug.log*
 # ---- Docker ----
 # (no volumes are stored in-repo; data lives on the host)
 
+# ---- Session logs (local conversation / brief files) ----
+opencode/
+
 # ---- IDE / editor ----
 .vscode/
 !.vscode/extensions.json
