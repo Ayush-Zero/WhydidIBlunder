@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 import chess
 import chess.pgn
 
-from .engine import Engine, mate_to_cp
+from .engine import Engine
 from .pov import to_mover_pov
+from .terminal import terminal_eval
 from .winpct import SUPPRESS_WIN_PTS, classify, win_pct
 
 
@@ -50,23 +51,8 @@ def read_game(pgn_text: str) -> chess.pgn.Game:
     return game
 
 
-def _mate_of(info: dict, pov: chess.Color) -> int | None:
-    """Signed mate distance (mover's POV) for ``info``; ``None`` if no mate."""
-    return to_mover_pov(info["score"], pov)[1]
-
-
 def _side_name(color: chess.Color) -> str:
     return "white" if color == chess.WHITE else "black"
-
-
-def _is_mating(info: dict, pov: chess.Color) -> bool:
-    mate = _mate_of(info, pov)
-    return mate is not None and mate > 0
-
-
-def _is_mated(info: dict, pov: chess.Color) -> bool:
-    mate = _mate_of(info, pov)
-    return mate is not None and mate < 0
 
 
 def analyse_game_moves(
@@ -107,12 +93,10 @@ def analyse_game_moves(
         # "After" has the opponent to move -> convert to the mover's POV.
         # Terminal positions are not sent to the engine: a delivered checkmate is
         # the best possible outcome for the mover (max), any other game-over is a
-        # draw. Without this, Stockfish's "mate 0" on a mated position is read as
-        # the mover being mated, mislabelling the checkmating move as a blunder.
-        if after_board.is_checkmate():
-            after_cp, mate_after = mate_to_cp(1), 1
-        elif after_board.is_game_over():
-            after_cp, mate_after = 0, None
+        # draw. See analyzer/terminal.py.
+        terminal = terminal_eval(after_board, mover)
+        if terminal is not None:
+            after_cp, mate_after = terminal
         else:
             after_cp, mate_after = to_mover_pov(analyses[i + 1][0]["score"], mover)
 
@@ -144,15 +128,13 @@ def analyse_game_moves(
         # NOT suppress a win%-threshold classification — walking into a forced
         # mate from a playable position is a real blunder. Forced moves get no
         # tag: there was no choice to make.
-        after_info = analyses[i + 1][0] if analyses[i + 1] else None
-        after_is_mating = after_board.is_checkmate() or (
-            after_info is not None and _is_mating(after_info, mover)
-        )
         tags: list[str] = []
         if not forced:
-            if _is_mating(before_lines[0], mover) and not after_is_mating:
+            if mate_before is not None and mate_before > 0 and not (
+                mate_after is not None and mate_after > 0
+            ):
                 tags.append("missed_mate")
-            if after_info is not None and _is_mated(after_info, mover):
+            if mate_after is not None and mate_after < 0:
                 tags.append("allowed_mate")
 
         played_san = pos.copy().san(mv)

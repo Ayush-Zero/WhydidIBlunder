@@ -17,12 +17,14 @@ from .report import (
     summarize,
     validate_report,
 )
+from .terminal import terminal_eval
 from .winpct import accuracy_from_win_diff, classify, win_pct
 
 __all__ = [
     "Engine",
     "mate_to_cp",
     "to_mover_pov",
+    "terminal_eval",
     "MoveReport",
     "read_game",
     "analyse_game_moves",
