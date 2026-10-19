@@ -14,7 +14,12 @@ from dataclasses import dataclass, field
 import chess
 import chess.pgn
 
-from .config import analysis_thresholds, suppression_win_pts
+from .config import (
+    analysis_depth,
+    analysis_multipv,
+    analysis_thresholds,
+    suppression_win_pts,
+)
 from .engine import Engine
 from .pov import to_mover_pov
 from .terminal import terminal_eval
@@ -60,14 +65,20 @@ def analyse_game_moves(
     game: chess.pgn.Game,
     *,
     engine: Engine,
-    depth: int = 16,
-    multipv: int = 4,
+    depth: int | None = None,
+    multipv: int | None = None,
 ) -> list[MoveReport]:
     """Analyse every move of ``game``.
 
     Each position is searched once and reused as the next move's "before"
     (halves the work). Classification is from the mover's perspective.
+
+    ``depth``/``multipv`` default to the configured values
+    (``ANALYSIS_DEPTH`` / ``ANALYSIS_MULTIPV``) — they are never hardcoded here.
     """
+    depth = analysis_depth() if depth is None else depth
+    multipv = analysis_multipv() if multipv is None else multipv
+
     moves = list(game.mainline_moves())
 
     # Classification cut-offs, from config (env-overridable) — read once.
@@ -178,8 +189,8 @@ def analyse_moves(
     pgn_text: str,
     *,
     engine: Engine,
-    depth: int = 16,
-    multipv: int = 4,
+    depth: int | None = None,
+    multipv: int | None = None,
 ) -> list[MoveReport]:
     """Convenience: parse the first game in ``pgn_text`` and analyse its moves."""
     return analyse_game_moves(
