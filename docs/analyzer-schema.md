@@ -81,7 +81,7 @@ with `score.pov(mover)` before computing anything.
 | `played_rank` | int ≥ 1 \| null | where the played move ranked among the MultiPV lines; `null` = not in the list |
 | `drop_win_pct` | number | `win_pct(before) − win_pct(after)`; the classification input |
 | `classification` | `"ok"` \| `"inaccuracy"` \| `"mistake"` \| `"blunder"` | see rules below |
-| `tags` | string[] | informational, e.g. `"missed_mate"`, `"allowed_mate"` |
+| `tags` | string[] | informational only; never changes `classification`. See the tag list below |
 | `suppressed` | bool | true if a suppression rule forced `ok` |
 | `suppress_reason` | string | `""`, `"forced"`, `"best move"`, or `"~= best"` |
 
@@ -92,10 +92,24 @@ with `score.pov(mover)` before computing anything.
 3. **`drop_win_pct ≤ 0.2`** (essentially equal to best) → `ok`, reason `"~= best"`.
 4. Otherwise by `drop_win_pct`: `≥ 10` inaccuracy, `≥ 20` mistake, `≥ 30` blunder.
 
-A suppressed move is **always** `"ok"` (enforced by the validator). Mate tags are
-recorded independently and never suppress the label: `missed_mate` = the mover
-had a forced mate and the played move loses it; `allowed_mate` = the played move
-lets the opponent force mate.
+A suppressed move is **always** `"ok"` (enforced by the validator). Tags are
+recorded independently and never suppress the label:
+
+| Tag | Fires when |
+|---|---|
+| `missed_mate` | the mover had a forced mate and the played move loses it |
+| `allowed_mate` | the played move lets the opponent force mate |
+| `hanging_piece` | the move leaves more of the mover's pieces en prise (attacked and undefended) |
+| `missed_capture` | a capture that wins material outright was available and was not taken |
+| `fork` | the move lets the opponent fork more of the mover's pieces |
+| `pin` | the move leaves more of the mover's pieces absolutely pinned |
+
+**Gating rule.** The four rule tags (`hanging_piece`, `missed_capture`, `fork`,
+`pin`) are attached **only to moves whose `classification` is not `"ok"`**. A
+tag exists to *explain* a flagged move, and their predicates are deliberately
+loose (a pawn left en prise counts; a free capture counts), so allowing them on
+good moves would bury the report in noise — including tagging a delivered
+checkmate. The mate tags are informational and may appear on an `"ok"` move.
 
 ## `summary`
 

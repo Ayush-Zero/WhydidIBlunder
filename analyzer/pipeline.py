@@ -22,6 +22,7 @@ from .config import (
 )
 from .engine import Engine
 from .pov import to_mover_pov
+from .tags import fork, hanging_piece, missed_capture, pin
 from .terminal import terminal_eval
 from .winpct import judge, win_pct
 
@@ -150,6 +151,20 @@ def analyse_game_moves(
                 tags.append("missed_mate")
             if mate_after is not None and mate_after < 0:
                 tags.append("allowed_mate")
+            # Rule tags (B6) annotate a **flagged** move only. A tag explains
+            # *why* a move was bad, and their predicates are deliberately loose
+            # (a pawn left en prise counts, a free capture counts), so letting
+            # them fire on "ok" moves — including mating ones — would bury the
+            # report in noise and make the tool look wrong.
+            if verdict.classification != "ok":
+                if hanging_piece(pos, mv):
+                    tags.append("hanging_piece")
+                if missed_capture(pos, mv):
+                    tags.append("missed_capture")
+                if fork(pos, mv):
+                    tags.append("fork")
+                if pin(pos, mv):
+                    tags.append("pin")
 
         played_san = pos.copy().san(mv)
         best_move = before_lines[0]["pv"][0]
