@@ -24,9 +24,9 @@
 
 | ID | Part | Deliverable | Done when |
 |----|------|-------------|-----------|
-| **A1** | SQLite schema + migrations | Tables `jobs`, `position_eval`, `moves`, `game_reports`; WAL enabled; a migration/init path | Fresh DB initialises cleanly; WAL confirmed on; re-running init is idempotent |
+| **A1** | SQLite schema + migrations | Tables `jobs`, `position_eval`, `moves`, `game_reports`; WAL enabled; a migration/init path | ✅ Done — `server/db.py`, `tests/test_db.py`, `docs/storage.md` |
 | **A2** | App skeleton + config | FastAPI app, settings from `.env`, structured logging, `/health` | `uvicorn` boots; `/health` returns OK; no secrets logged |
-| **A3** | Chess.com client (server-side) | Fetch archives + a month's games; **cache responses**; handle **empty months (404)**, **bots**, **"from position" games**, and games with **no `uuid`** (fall back to `url`/`link` as the key) | Unit tests over recorded JSON cover every edge case above |
+| **A3** | Chess.com client (server-side) | Fetch archives + a month's games; **cache responses**; handle **empty months (404)**, **bots**, **"from position" games**, and games with **no `uuid`** (fall back to `url`/`link` as the key) | ✅ Done — `server/chesscom.py`, `tests/test_chesscom.py` over recorded JSON |
 
 ---
 
@@ -104,9 +104,13 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
 
 ## Suggested first three steps
 
-1. **A1** — SQLite schema (nothing else has a home until storage exists).
+1. ~~**A1** — SQLite schema~~ ✅ done; see `docs/storage.md` for the key decisions.
 2. **B1** — the `fen_key` definition + tests (the cache is the sneakiest bug).
 3. **B2 → B3** — atomic claim + worker loop (the concurrency core).
+
+> A2 (the FastAPI app skeleton) is still outstanding and is a prerequisite for
+> Milestone C; A1 and A3 were built first because neither needs it and both are
+> on the critical path for someone else.
 
 > Dependency note: Phase 2's worker calls the Phase 1 `analyze_game(pgn, color)
 > -> dict`. Phase 1's **frozen output schema (A1)** and **pure-logic tests** are

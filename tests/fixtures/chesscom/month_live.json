@@ -1,0 +1,38 @@
+{
+  "games": [
+    {
+      "accuracies": {"white": 87.4, "black": 91.2},
+      "black": {"username": "BEAST-ASH", "user_id": 1, "rating": 1153, "result": "win", "uuid": "b1111111-0000-0000-0000-000000000001"},
+      "eco": "https://www.chess.com/eco/C40",
+      "end_time": 1791013107,
+      "fen": "r5k1/1p3ppp/8/p7/P1p5/2Pb1P1q/5b2/3R3K w - - 0 32",
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"Live Chess\"]\n[Site \"Chess.com\"]\n[Date \"2026.10.03\"]\n[Round \"-\"]\n[White \"Guigbab\"]\n[Black \"BEAST-ASH\"]\n[Result \"0-1\"]\n[ECO \"C40\"]\n\n1. e4 e5 2. Nf3 Nc6 0-1\n",
+      "rated": true,
+      "rules": "chess",
+      "tcn": "YcYcGQYQYcYc",
+      "time_class": "rapid",
+      "time_control": "600",
+      "url": "https://www.chess.com/game/live/184741678854",
+      "uuid": "391fb071-befc-11f1-b809-a9c32901000f",
+      "white": {"username": "Guigbab", "user_id": 2, "rating": 1114, "result": "agreed", "uuid": "w1111111-0000-0000-0000-000000000001"}
+    },
+    {
+      "accuracies": {"white": 91.7, "black": 88.9},
+      "black": {"username": "Gopinath_27", "user_id": 3, "rating": 1146, "result": "checkmated", "uuid": "b2222222-0000-0000-0000-000000000002"},
+      "eco": "https://www.chess.com/eco/B01",
+      "end_time": 1791013370,
+      "fen": "3rk2r/4Qpbp/2p3p1/8/2PP1B2/8/PPn2PPP/R3R1K1 b - - 0 21",
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"Live Chess\"]\n[Site \"Chess.com\"]\n[Date \"2026.10.03\"]\n[Round \"-\"]\n[White \"BEAST-ASH\"]\n[Black \"Gopinath_27\"]\n[Result \"1-0\"]\n[ECO \"B01\"]\n\n1. e4 d5 2. exd5 Qxd5 1-0\n",
+      "rated": true,
+      "rules": "chess",
+      "tcn": "YcYcGQYQ",
+      "time_class": "rapid",
+      "time_control": "600",
+      "url": "https://www.chess.com/game/live/184741950578",
+      "uuid": "7515eb15-befd-11f1-8dbb-feb0c301000f",
+      "white": {"username": "BEAST-ASH", "user_id": 1, "rating": 1171, "result": "win", "uuid": "w2222222-0000-0000-0000-000000000002"}
+    }
+  ]
+}

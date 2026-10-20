@@ -1,0 +1,117 @@
+{
+  "games": [
+    {
+      "black": {"username": "HumanOpponent1", "rating": 1200, "result": "agreed"},
+      "end_time": 1800000001,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"vs Bot\"]\n[White \"BotByTitle\"]\n[Black \"HumanOpponent1\"]\n[Result \"*\"]\n\n1. e4 e5 *\n",
+      "rated": false,
+      "rules": "chess",
+      "time_class": "blitz",
+      "time_control": "300",
+      "url": "https://www.chess.com/game/live/9000000001",
+      "uuid": "aaaa0001-0000-0000-0000-000000000001",
+      "white": {"username": "BotByTitle", "user_title": "bot", "rating": null, "result": "agreed"}
+    },
+    {
+      "black": {"username": "sven--bot", "rating": null, "result": "win"},
+      "end_time": 1800000002,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"vs Bot\"]\n[White \"BotBySuffix\"]\n[Black \"sven--bot\"]\n[Result \"0-1\"]\n\n1. e4 e5 0-1\n",
+      "rated": false,
+      "rules": "chess",
+      "time_class": "blitz",
+      "time_control": "300",
+      "url": "https://www.chess.com/game/live/9000000002",
+      "uuid": "aaaa0002-0000-0000-0000-000000000002",
+      "white": {"username": "BotBySuffix", "rating": 1180, "result": "checkmated"}
+    },
+    {
+      "black": {"username": "FromPosByType", "rating": 1150, "result": "agreed"},
+      "end_time": 1800000003,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"Live Chess\"]\n[White \"FromPosByType\"]\n[Black \"FromPosByType\"]\n[Result \"*\"]\n\n1. e4 e5 *\n",
+      "rated": true,
+      "rules": "chess",
+      "time_class": "rapid",
+      "time_control": "600",
+      "type": "fromposition",
+      "url": "https://www.chess.com/game/live/9000000003",
+      "uuid": "aaaa0003-0000-0000-0000-000000000003",
+      "white": {"username": "FromPosByType", "rating": 1190, "result": "agreed"}
+    },
+    {
+      "black": {"username": "FromPosBySetup", "rating": 1160, "result": "agreed"},
+      "end_time": 1800000004,
+      "initial_setup": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 4 3",
+      "pgn": "[Event \"Live Chess\"]\n[White \"FromPosBySetup\"]\n[Black \"FromPosBySetup\"]\n[Result \"*\"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 *\n",
+      "rated": true,
+      "rules": "chess",
+      "time_class": "rapid",
+      "time_control": "600",
+      "url": "https://www.chess.com/game/live/9000000004",
+      "uuid": "aaaa0004-0000-0000-0000-000000000004",
+      "white": {"username": "FromPosBySetup", "rating": 1195, "result": "agreed"}
+    },
+    {
+      "black": {"username": "FromPosByPgn", "rating": 1170, "result": "agreed"},
+      "end_time": 1800000005,
+      "pgn": "[Event \"Puzzle Practice\"]\n[SetUp \"1\"]\n[FEN \"6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1\"]\n[White \"FromPosByPgn\"]\n[Black \"FromPosByPgn\"]\n[Result \"*\"]\n\n1. Rd8+ Kh7 *\n",
+      "rated": false,
+      "rules": "chess",
+      "time_class": "blitz",
+      "time_control": "180",
+      "url": "https://www.chess.com/game/live/9000000005",
+      "uuid": "aaaa0005-0000-0000-0000-000000000005",
+      "white": {"username": "FromPosByPgn", "rating": 1199, "result": "agreed"}
+    },
+    {
+      "black": {"username": "NoUuidUrl", "rating": 1140, "result": "win"},
+      "end_time": 1800000006,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"Live Chess\"]\n[White \"NoUuidUrl\"]\n[Black \"NoUuidUrl\"]\n[Result \"1-0\"]\n\n1. e4 e5 2. Qh5 Nc6 3. Qxf7 1-0\n",
+      "rated": true,
+      "rules": "chess",
+      "time_class": "rapid",
+      "time_control": "600",
+      "url": "https://www.chess.com/game/live/9000000006",
+      "white": {"username": "NoUuidUrl", "rating": 1205, "result": "win"}
+    },
+    {
+      "black": {"username": "NoUuidLink", "rating": 1145, "result": "agreed"},
+      "end_time": 1800000007,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "link": "https://www.chess.com/daily/game/9000000007",
+      "pgn": "[Event \"Daily Chess\"]\n[White \"NoUuidLink\"]\n[Black \"NoUuidLink\"]\n[Result \"*\"]\n\n1. d4 d5 *\n",
+      "rated": true,
+      "rules": "chess",
+      "time_class": "daily",
+      "time_control": "1/86400",
+      "white": {"username": "NoUuidLink", "rating": 1210, "result": "agreed"}
+    },
+    {
+      "black": {"username": "NoIdentifier", "rating": 1130, "result": "agreed"},
+      "end_time": 1800000008,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": "[Event \"Archive import\"]\n[White \"NoIdentifier\"]\n[Black \"NoIdentifier\"]\n[Result \"*\"]\n\n1. c4 c5 *\n",
+      "rated": true,
+      "rules": "chess",
+      "time_class": "daily",
+      "time_control": "1/86400",
+      "white": {"username": "NoIdentifier", "rating": 1215, "result": "agreed"}
+    },
+    {
+      "black": {"username": "NoPgn", "rating": 1135, "result": "*"},
+      "end_time": 1800000009,
+      "initial_setup": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "pgn": null,
+      "rated": true,
+      "rules": "chess",
+      "time_class": "rapid",
+      "time_control": "600",
+      "url": "https://www.chess.com/game/live/9000000009",
+      "uuid": "aaaa0009-0000-0000-0000-000000000009",
+      "white": {"username": "NoPgn", "rating": 1220, "result": "*"}
+    }
+  ]
+}
