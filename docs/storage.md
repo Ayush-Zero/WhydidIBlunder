@@ -39,6 +39,11 @@ about half the rows.
 `pgn` is stored on the job so a retry or a re-queue never has to go back to
 chess.com.
 
+`heartbeat_at` (added by migration 2) is what the reaper keys off. It is
+deliberately **not** derived from `started_at`: a large analysis may legitimately
+run past the timeout, so *how long it has been running* cannot distinguish a slow
+job from a dead worker. *When progress was last recorded* can.
+
 ### `position_eval` — the cache key
 
 ```
@@ -105,7 +110,10 @@ opaque key.
 
 ## Deliberately not here yet
 
-- **Cache reads/writes** (hit, miss, depth-≥, poisoning) — Phase 2 **B1**.
-- **The atomic job claim** (`BEGIN IMMEDIATE` + `RETURNING`) — **B2**.
-  `insert_job` / `get_job` here are row plumbing only.
-- **Anything FastAPI** — **A2 / C\***.
+- **The durable position cache** — B1 defines the key and the depth rule
+  (`analyzer/cache.py`), but the SQLite-backed subclass that writes to
+  `position_eval` lands with B2/B3, which need a connection anyway. The key
+  columns already match the table exactly.
+- **The reaper and the hard timeout** — **B4 / B5**. `server/queue.py` owns the
+  claim and the transitions; it does not yet sweep for stale jobs.
+- **Anything FastAPI beyond the skeleton** — **A2 / C\***.

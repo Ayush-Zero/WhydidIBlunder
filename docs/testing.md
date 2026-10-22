@@ -39,7 +39,8 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Engine wiring | `tests/test_engine_reuse.py` | a re-search creeping back in (2n engine calls instead of n+1) and settings going hardcoded |
 | Cache key logic | `tests/test_cache.py` | the cache poisoning itself: a key that ignores the halfmove clock or the engine build, or a shallow row answering a deep request |
 | Cache in front of the engine | `tests/test_cache_wiring.py` | the cache silently not being consulted, or surviving an engine bump |
-| Storage | `tests/test_db.py` | WAL not actually set, migrations not idempotent, keys drifting from the plan |
+| Storage | `tests/test_db.py` | WAL not actually set, migrations not idempotent, keys drifting from the plan, a migration that only runs on a *fresh* database |
+| Job queue | `tests/test_queue.py` | two workers claiming one job, contention surfacing as `database is locked`, a retried job wearing its last error |
 | Chess.com client | `tests/test_chesscom.py` | a 404-for-empty-month crashing, bots/from-position games slipping through, an uncached or non-atomic response cache |
 | API skeleton | `tests/test_app.py` | `/health` reporting healthy while the database is unusable; CORS opening up |
 | Frozen fixture, self-consistency | `tests/test_report.py` | a report that no longer recomputes from its own evals |

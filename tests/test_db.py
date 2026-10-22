@@ -95,6 +95,43 @@ def test_schema_version_is_current(conn):
     assert db.schema_version(conn) == db.SCHEMA_VERSION
 
 
+def test_migrations_apply_to_an_existing_database(tmp_path):
+    """The upgrade path, not just the fresh-install path.
+
+    A deployed v1 database must gain the B2 ``heartbeat_at`` column without
+    losing its rows — the failure this guards is an ``ALTER TABLE`` that only
+    ever runs on a brand-new file, which passes every fresh-install test and
+    breaks the one machine that matters.
+    """
+    path = tmp_path / "v1.db"
+    conn = db.connect(path)
+    db.enable_wal(conn)
+    db._migration_table(conn)
+    conn.executescript(db.MIGRATIONS[0][1])  # a v1 schema, as deployed
+    conn.execute(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES (1, ?)",
+        (db.utcnow(),),
+    )
+    db.insert_job(
+        conn, job_id="old", game_key="k", username="u",
+        user_color="white", pgn="p", depth=12, multipv=4,
+    )
+    assert "heartbeat_at" not in db.table_columns(conn, "jobs")
+    conn.close()
+
+    conn = db.connect(path)
+    try:
+        assert db.init_db(conn) == db.SCHEMA_VERSION
+        assert "heartbeat_at" in db.table_columns(conn, "jobs")
+        # Migrations are recorded, and the pre-existing row survived intact.
+        assert [r[0] for r in conn.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        )] == [1, db.SCHEMA_VERSION]
+        assert db.get_job(conn, "old")["status"] == "queued"
+    finally:
+        conn.close()
+
+
 def test_two_connections_can_both_initialise(tmp_path):
     """A worker and the API racing on first boot must not collide."""
     path = tmp_path / "race.db"

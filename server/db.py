@@ -172,6 +172,16 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         );
         """,
     ),
+    (
+        2,
+        """
+        -- B2: the worker heartbeat. A separate column from ``started_at``
+        -- because the reaper has to distinguish "slow" from "dead": a large
+        -- analysis may legitimately run past the timeout, but a job that has
+        -- stopped recording progress has not.
+        ALTER TABLE jobs ADD COLUMN heartbeat_at TEXT;
+        """,
+    ),
 )
 
 #: The schema version this build expects. Bump by appending to MIGRATIONS.
