@@ -34,9 +34,9 @@
 
 | ID | Part | Deliverable | Done when |
 |----|------|-------------|-----------|
-| **B1** | **Position cache (`fen_key`)** | Normalise FEN (strip fullmove counter; **include halfmove clock — decide explicitly**); **include engine version/build**; serve a cached row only when its **depth ≥ requested** | ✅ Done — `analyzer/cache.py`, `docs/cache.md`, `tests/test_cache.py`, `tests/test_cache_wiring.py` (SQLite backend pending in B) |
+| **B1** | **Position cache (`fen_key`)** | Normalise FEN (strip fullmove counter; **include halfmove clock — decide explicitly**); **include engine version/build**; serve a cached row only when its **depth ≥ requested** | ✅ Done — key logic in `analyzer/cache.py` (`docs/cache.md`); durable backend in `server/position_cache.py` (B3) |
 | **B2** | Atomic job claim | `BEGIN IMMEDIATE` + `PRAGMA busy_timeout`; `UPDATE … RETURNING id` sets `running`, `worker_id`, `started_at` | ✅ Done — `server/queue.py`, `docs/queue.md`, `tests/test_queue.py` (migration 2 adds `heartbeat_at`) |
-| **B3** | Worker loop | Claim queued job → run `analyze_game`, persisting per-ply `moves` + progress; **check cancel between plies**; finalise `game_report` + job status | One job runs end to end; progress advances; status goes `queued → running → done` |
+| **B3** | Worker loop | Claim queued job → run `analyze_game`, persisting per-ply `moves` + progress; **check cancel between plies**; finalise `game_report` + job status | ✅ Done — `server/worker.py`, `server/position_cache.py`, `server/worker_main.py`, `docs/worker.md`, `tests/test_worker.py` (verified live: 45 plies, accuracy 87.9) |
 | **B4** | **Stale-job reaper** | Periodic sweep returns `running` jobs older than the hard timeout to `queued`/`failed` | Kill a worker mid-job → reaper requeues it → it completes |
 | **B5** | Hard job timeout | Kill stuck Stockfish for the current job | A deliberately-hung analysis is killed; job marked failed/requeued, worker survives |
 
@@ -107,13 +107,14 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
 1. ~~**A1** — SQLite schema~~ ✅ done; see `docs/storage.md` for the key decisions.
    ~~**A2** — app skeleton~~ ✅ done. ~~**A3** — Chess.com client~~ ✅ done.
    **Milestone A is complete.**
-2. ~~**B1** — the `fen_key` definition + tests~~ ✅ done; see `docs/cache.md`. The
-   SQLite backend for it belongs with B2/B3 (it needs a connection anyway).
+2. ~~**B1** — the `fen_key` definition + tests~~ ✅ done; see `docs/cache.md`.
    ~~**B2** — the atomic claim~~ ✅ done; see `docs/queue.md`. 8 threads against
    one database file claim 40 jobs exactly once, and the harness is shown to
    *detect* a naive read-then-write claim.
-3. **B3** — the worker loop (claim → analyse → persist → finalise).
-4. **B4 → B5** — the reaper and the hard timeout. Both are required: B4 covers
+   ~~**B3** — the worker loop~~ ✅ done; see `docs/worker.md`. The durable cache
+   (`server/position_cache.py`) landed with it, since the worker has the
+   connection.
+3. **B4 → B5** — the reaper and the hard timeout. Both are required: B4 covers
    worker *process death*, which a job timeout cannot.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).

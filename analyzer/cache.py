@@ -113,11 +113,44 @@ class PositionCache:
 
     # -- storage (subclass responsibility) -------------------------------
 
-    def _store(self, fen_key: str, engine_version: str, depth: int, multipv: int, value) -> None:
+    def _store(
+        self, fen_key: str, engine_version: str, depth: int, multipv: int, value
+    ) -> None:
         raise NotImplementedError
 
-    def _load(self, fen_key: str, engine_version: str) -> dict[int, dict[int, object]] | None:
+    def _load(
+        self, fen_key: str, engine_version: str
+    ) -> dict[int, dict[int, object]] | None:
         raise NotImplementedError
+
+    def _store_lines(
+        self,
+        fen_key: str,
+        engine_version: str,
+        depth: int,
+        multipv: int,
+        lines: list,
+        board: chess.Board,
+    ) -> None:
+        """Persist MultiPV ``lines`` for a position.
+
+        Separate from :meth:`_store` because a durable backend needs the *board*,
+        not just the key: the score's point of view (and therefore how to
+        re-anchor it on the way out) is only recoverable from the side to move.
+        The default implementation drops the board and defers to ``_store``,
+        which is exactly right for an in-memory cache that never serialises.
+        """
+        self._store(fen_key, engine_version, depth, multipv, lines)
+
+    def _load_lines(
+        self, fen_key: str, engine_version: str, board: chess.Board
+    ) -> dict[int, dict[int, list]] | None:
+        """The stored lines for a position, or ``None``.
+
+        The mirror of :meth:`_store_lines`; the default round-trips whatever
+        ``_load`` returned, so in-memory storage needs no special handling.
+        """
+        return self._load(fen_key, engine_version)
 
     # -- the API ---------------------------------------------------------
 
@@ -128,6 +161,7 @@ class PositionCache:
         engine_version: str,
         depth: int,
         multipv: int,
+        board: chess.Board | None = None,
     ) -> tuple[int, object] | None:
         """A cached result at **at least** ``depth``, or ``None`` on a miss.
 
@@ -138,10 +172,18 @@ class PositionCache:
         The strictness matters in both directions: the depth must be ``>=`` the
         request (a shallower row is a *miss* — serving it would silently weaken
         the analysis), and the multipv must match exactly.
+
+        ``board`` is optional and only a durable backend needs it (to re-anchor a
+        stored score); an in-memory backend ignores it.
         """
         depth = int(depth)
         multipv = self.multipv_key(multipv)
-        rows = self._load(self.fen_key(fen), engine_version)
+        key = self.fen_key(fen)
+        rows = (
+            self._load_lines(key, engine_version, board)
+            if board is not None
+            else self._load(key, engine_version)
+        )
         if not rows:
             return None
 
@@ -165,14 +207,28 @@ class PositionCache:
         engine_version: str,
         depth: int,
         multipv: int,
-        value: object,
+        value: object = None,
+        lines: list | None = None,
+        board: chess.Board | None = None,
     ) -> None:
-        """Record a result. Deeper results are never overwritten by shallower."""
+        """Record a result. Deeper results are never overwritten by shallower.
+
+        Callers pass **either** ``value`` (an opaque payload, for an in-memory
+        backend) **or** ``lines`` with a ``board`` (engine output, for a durable
+        one). The board is what lets a durable backend serialise the score's
+        point of view; an in-memory backend never needs it.
+        """
         key = self.fen_key(fen)
+        multipv = self.multipv_key(multipv)
+        depth = int(depth)
+
+        if lines is not None and board is not None:
+            self._store_lines(key, engine_version, depth, multipv, lines, board)
+            return
+
         cols = self._load(key, engine_version) or {}
-        by_depth = cols.setdefault(int(depth), {})
-        by_depth[self.multipv_key(multipv)] = value
-        self._store(key, engine_version, int(depth), self.multipv_key(multipv), value)
+        cols.setdefault(depth, {})[multipv] = value
+        self._store(key, engine_version, depth, multipv, value)
 
 
 class MemoryPositionCache(PositionCache):

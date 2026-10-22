@@ -41,6 +41,7 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Cache in front of the engine | `tests/test_cache_wiring.py` | the cache silently not being consulted, or surviving an engine bump |
 | Storage | `tests/test_db.py` | WAL not actually set, migrations not idempotent, keys drifting from the plan, a migration that only runs on a *fresh* database |
 | Job queue | `tests/test_queue.py` | two workers claiming one job, contention surfacing as `database is locked`, a retried job wearing its last error |
+| Worker loop | `tests/test_worker.py` | a job stuck `running` after a failure or a cancel, progress not advancing, plies lost on cancel, the durable cache not actually saving searches |
 | Chess.com client | `tests/test_chesscom.py` | a 404-for-empty-month crashing, bots/from-position games slipping through, an uncached or non-atomic response cache |
 | API skeleton | `tests/test_app.py` | `/health` reporting healthy while the database is unusable; CORS opening up |
 | Frozen fixture, self-consistency | `tests/test_report.py` | a report that no longer recomputes from its own evals |

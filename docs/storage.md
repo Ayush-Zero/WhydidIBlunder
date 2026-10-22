@@ -110,10 +110,8 @@ opaque key.
 
 ## Deliberately not here yet
 
-- **The durable position cache** — B1 defines the key and the depth rule
-  (`analyzer/cache.py`), but the SQLite-backed subclass that writes to
-  `position_eval` lands with B2/B3, which need a connection anyway. The key
-  columns already match the table exactly.
 - **The reaper and the hard timeout** — **B4 / B5**. `server/queue.py` owns the
-  claim and the transitions; it does not yet sweep for stale jobs.
+  claim and the transitions; it does not yet sweep for stale jobs. The worker
+  (`server/worker.py`) writes `moves`, `game_reports` and per-ply progress; the
+  durable cache lives in `server/position_cache.py`.
 - **Anything FastAPI beyond the skeleton** — **A2 / C\***.

@@ -21,6 +21,7 @@ idempotent DDL is the cheaper guarantee here).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -31,18 +32,23 @@ __all__ = [
     "DEFAULT_DB_PATH",
     "JOB_STATUSES",
     "MIGRATIONS",
+    "MOVE_COLUMNS",
     "SCHEMA_VERSION",
     "USER_COLORS",
     "connect",
     "default_db_path",
     "enable_wal",
     "get_job",
+    "get_report",
     "init_db",
     "insert_job",
+    "list_moves",
     "primary_key",
+    "save_report",
     "schema_version",
     "table_columns",
     "tables",
+    "upsert_move",
     "utcnow",
 ]
 
@@ -356,3 +362,170 @@ def insert_job(
 def get_job(conn: sqlite3.Connection, job_id: str) -> sqlite3.Row | None:
     """Fetch one job row, or ``None`` if it does not exist."""
     return conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+
+
+# --------------------------------------------------------------------------- #
+# results: moves and reports
+# --------------------------------------------------------------------------- #
+#: The move columns a :class:`~analyzer.report` wire dict maps onto, in the order
+#: ``insert_move`` expects them. One list rather than two literals so the column
+#: names and the parameter order cannot drift apart.
+MOVE_COLUMNS = (
+    "job_id",
+    "ply",
+    "move_number",
+    "side",
+    "fen_before",
+    "fen_after",
+    "san",
+    "best_san",
+    "pv_san",
+    "played_rank",
+    "eval_before_cp",
+    "eval_after_cp",
+    "eval_before_win_pct",
+    "eval_after_win_pct",
+    "mate_before",
+    "mate_after",
+    "drop_win_pct",
+    "classification",
+    "tags",
+    "suppressed",
+    "suppress_reason",
+)
+
+
+def upsert_move(
+    conn: sqlite3.Connection,
+    *,
+    job_id: str,
+    move: dict,
+    fen_before: str,
+    fen_after: str,
+) -> None:
+    """Persist one analysed ply.
+
+    ``move`` is a :func:`analyzer.report.move_to_dict` shape; ``fen_before`` /
+    ``fen_after`` are supplied by the caller because the wire dict deliberately
+    omits FENs (they are storage detail, and would bloat the API response).
+
+    ``INSERT … ON CONFLICT DO UPDATE`` rather than a plain insert: a retried job
+    re-runs the plies it had already written, and re-running must be idempotent
+    instead of a primary-key violation. ``moves`` is keyed ``(job_id, ply)``, so
+    ``ON CONFLICT`` targets exactly the retry case.
+    """
+    values = (
+        job_id,
+        move["ply"],
+        move["move_number"],
+        move["side"],
+        fen_before,
+        fen_after,
+        move["san"],
+        move["best_san"],
+        json.dumps(list(move.get("pv_san") or [])),
+        move.get("played_rank"),
+        move["eval_before_cp"],
+        move["eval_after_cp"],
+        move["eval_before_win_pct"],
+        move["eval_after_win_pct"],
+        move.get("mate_before"),
+        move.get("mate_after"),
+        move["drop_win_pct"],
+        move["classification"],
+        json.dumps(list(move.get("tags") or [])),
+        1 if move.get("suppressed") else 0,
+        move.get("suppress_reason") or "",
+    )
+    columns = ", ".join(MOVE_COLUMNS)
+    placeholders = ", ".join("?" * len(MOVE_COLUMNS))
+    updates = ", ".join(
+        f"{column} = excluded.{column}" for column in MOVE_COLUMNS if column != "job_id"
+    )
+    conn.execute(
+        f"""
+        INSERT INTO moves ({columns}) VALUES ({placeholders})
+        ON CONFLICT(job_id, ply) DO UPDATE SET {updates}
+        """,
+        values,
+    )
+
+
+def list_moves(conn: sqlite3.Connection, job_id: str) -> list[sqlite3.Row]:
+    """One job's moves in ply order."""
+    return conn.execute(
+        "SELECT * FROM moves WHERE job_id = ? ORDER BY ply", (job_id,)
+    ).fetchall()
+
+
+def save_report(
+    conn: sqlite3.Connection,
+    *,
+    game_key: str,
+    user_color: str,
+    job_id: str | None,
+    report: dict,
+) -> None:
+    """Store a finished report whole, plus its denormalised summary.
+
+    Keyed ``(game_key, user_color)``: the same game analysed from both sides is
+    two reports, and that pair is what the API dedupes on. The upsert makes
+    "reuse or replace the report for this game+colour" a single statement rather
+    than a lookup-then-insert race.
+    """
+    if user_color not in USER_COLORS:
+        raise ValueError(f"user_color must be one of {USER_COLORS}, got {user_color!r}")
+    summary = report.get("summary") or {}
+    engine = report.get("engine") or {}
+    now = utcnow()
+    conn.execute(
+        """
+        INSERT INTO game_reports
+            (game_key, user_color, job_id, schema_version, report_json,
+             engine_version, depth, multipv, moves_analysed, accuracy,
+             blunders, mistakes, inaccuracies, ok, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(game_key, user_color) DO UPDATE SET
+            job_id         = excluded.job_id,
+            schema_version = excluded.schema_version,
+            report_json    = excluded.report_json,
+            engine_version = excluded.engine_version,
+            depth          = excluded.depth,
+            multipv        = excluded.multipv,
+            moves_analysed = excluded.moves_analysed,
+            accuracy       = excluded.accuracy,
+            blunders       = excluded.blunders,
+            mistakes       = excluded.mistakes,
+            inaccuracies   = excluded.inaccuracies,
+            ok             = excluded.ok,
+            updated_at     = excluded.updated_at
+        """,
+        (
+            game_key,
+            user_color,
+            job_id,
+            int(report.get("schema_version", 0)),
+            json.dumps(report),
+            str(engine.get("name", "")),
+            int(engine.get("depth", 0)),
+            int(engine.get("multipv", 0)),
+            int(summary.get("moves_analysed", 0)),
+            summary.get("accuracy"),
+            int(summary.get("blunders", 0)),
+            int(summary.get("mistakes", 0)),
+            int(summary.get("inaccuracies", 0)),
+            int(summary.get("ok", 0)),
+            now,
+            now,
+        ),
+    )
+
+
+def get_report(
+    conn: sqlite3.Connection, game_key: str, user_color: str
+) -> sqlite3.Row | None:
+    """The stored report row for ``(game_key, user_color)``, or ``None``."""
+    return conn.execute(
+        "SELECT * FROM game_reports WHERE game_key = ? AND user_color = ?",
+        (game_key, user_color),
+    ).fetchone()

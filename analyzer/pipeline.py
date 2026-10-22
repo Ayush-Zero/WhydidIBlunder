@@ -80,11 +80,13 @@ def _analyse_cached(
     if cache is None:
         return engine.analyse(board, depth=depth, multipv=multipv)
 
+    version = PositionCache.engine_version(engine)
     hit = cache.lookup(
         fen=board.fen(),
-        engine_version=PositionCache.engine_version(engine),
+        engine_version=version,
         depth=depth,
         multipv=multipv,
+        board=board,
     )
     if hit is not None:
         return hit[1]
@@ -92,10 +94,11 @@ def _analyse_cached(
     lines = engine.analyse(board, depth=depth, multipv=multipv)
     cache.store(
         fen=board.fen(),
-        engine_version=PositionCache.engine_version(engine),
+        engine_version=version,
         depth=depth,
         multipv=multipv,
-        value=lines,
+        lines=lines,
+        board=board,
     )
     return lines
 
@@ -110,18 +113,49 @@ def analyse_game_moves(
 ) -> list[MoveReport]:
     """Analyse every move of ``game``.
 
-    Each position is searched once and reused as the next move's "before"
-    (halves the work). Classification is from the mover's perspective.
+    A thin wrapper over :func:`iter_game_moves` that collects the whole game.
+    Kept because it is the natural thing for a caller that wants a result, not
+    a stream; the worker (B3) drives the iterator instead so it can persist each
+    ply and honour a cancel between them.
 
     ``depth``/``multipv`` default to the configured values
     (``ANALYSIS_DEPTH`` / ``ANALYSIS_MULTIPV``) — they are never hardcoded here.
 
     ``cache`` (B1) is consulted before every engine call and filled after it, so
     a repeated position — across games, not just within one — is searched once.
-    ``None`` means "no cache" and is the default: caching is a correctness-bearing
-    optimisation, so it is switched on deliberately (``CACHE_DIR``) rather than
-    inherited. ``tests/test_cache_wiring.py`` pins both the hit path and the
-    fact that an engine bump invalidates it.
+    """
+    return [
+        report
+        for _, _, report in iter_game_moves(
+            game, engine=engine, depth=depth, multipv=multipv, cache=cache
+        )
+    ]
+
+
+def iter_game_moves(
+    game: chess.pgn.Game,
+    *,
+    engine: Engine,
+    depth: int | None = None,
+    multipv: int | None = None,
+    cache: PositionCache | None = None,
+):
+    """Yield ``(index, total_plies, MoveReport)`` one ply at a time.
+
+    This is the shape the worker needs. Analysing a whole game in one call means
+    a cancel cannot be honoured until it is over and progress cannot be reported
+    at all; a generator lets the caller act *between* plies — persist a row,
+    record progress, check for cancellation.
+
+    The work is identical to the collect-everything version, and the two share
+    this code, so "the worker's numbers match the CLI's" is structural rather
+    than a coincidence maintained by hand.
+
+    Positions are still searched **exactly once** each: ``before_lines`` for ply
+    ``i`` is the same analysis that will be ply ``i+1``'s "before", carried in
+    ``previous_analysis`` rather than recomputed. The only subtlety introduced by
+    laziness is that position *i+1* is searched when ply *i+1* is requested, so
+    an ``n``-ply game still costs ``n + 1`` searches.
     """
     depth = analysis_depth() if depth is None else depth
     multipv = analysis_multipv() if multipv is None else multipv
@@ -138,19 +172,30 @@ def analyse_game_moves(
         board.push(mv)
         boards.append(board.copy())
 
-    # positions 0..n, each analysed exactly once; terminal positions are skipped
-    analyses = [
-        None if b.is_game_over() else _analyse_cached(engine, b, depth, multipv, cache)
-        for b in boards
-    ]
+    total = len(moves)
 
-    reports: list[MoveReport] = []
+    def analysed(index: int):
+        """Position ``index``'s lines, or ``None`` for a terminal position.
+
+        Terminal positions are never sent to the engine — a delivered checkmate
+        is the best possible outcome for the mover (see ``analyzer/terminal.py``).
+        """
+        position = boards[index]
+        if position.is_game_over():
+            return None
+        return _analyse_cached(engine, position, depth, multipv, cache)
+
+    before_lines = analysed(0)
     for i, mv in enumerate(moves):
         pos = boards[i]
         mover = pos.turn
 
-        before_lines = analyses[i]
         after_board = boards[i + 1]
+
+        # Position i+1 is searched here, and it is the *same* analysis the next
+        # iteration will use as its "before" (see the carry at the end of the
+        # loop) — that is what keeps the cost at n + 1 searches.
+        after_lines = analysed(i + 1)
 
         before_cp, mate_before = to_mover_pov(before_lines[0]["score"], mover)
         # "After" has the opponent to move -> convert to the mover's POV.
@@ -161,7 +206,7 @@ def analyse_game_moves(
         if terminal is not None:
             after_cp, mate_after = terminal
         else:
-            after_cp, mate_after = to_mover_pov(analyses[i + 1][0]["score"], mover)
+            after_cp, mate_after = to_mover_pov(after_lines[0]["score"], mover)
 
         drop = win_pct(before_cp) - win_pct(after_cp)
 
@@ -222,28 +267,30 @@ def analyse_game_moves(
             pv_san.append(pv_board.san(pv_move))
             pv_board.push(pv_move)
 
-        reports.append(
-            MoveReport(
-                ply=i + 1,
-                move_number=i // 2 + 1,
-                side=_side_name(mover),
-                played_san=played_san,
-                best_san=best_san,
-                eval_before_cp=before_cp,
-                eval_after_cp=after_cp,
-                mate_before=mate_before,
-                mate_after=mate_after,
-                drop=drop,
-                classification=verdict.classification,
-                played_rank=rank,
-                suppressed=verdict.suppressed,
-                suppress_reason=verdict.reason,
-                tags=tags,
-                pv_san=pv_san,
-            )
+        report = MoveReport(
+            ply=i + 1,
+            move_number=i // 2 + 1,
+            side=_side_name(mover),
+            played_san=played_san,
+            best_san=best_san,
+            eval_before_cp=before_cp,
+            eval_after_cp=after_cp,
+            mate_before=mate_before,
+            mate_after=mate_after,
+            drop=drop,
+            classification=verdict.classification,
+            played_rank=rank,
+            suppressed=verdict.suppressed,
+            suppress_reason=verdict.reason,
+            tags=tags,
+            pv_san=pv_san,
         )
 
-    return reports
+        # Position i+1 is ply i+1's "before" as well as ply i's "after" — search
+        # it here, once, and hand it to the next iteration. This is what keeps
+        # the cost at n + 1 searches despite the loop being lazy.
+        before_lines = after_lines
+        yield i, total, report
 
 
 def analyse_moves(

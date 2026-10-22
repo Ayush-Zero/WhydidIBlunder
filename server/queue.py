@@ -41,6 +41,7 @@ __all__ = [
     "complete_job",
     "fail_job",
     "record_progress",
+    "request_cancel",
     "requeue_job",
     "touch_job",
 ]
@@ -220,3 +221,25 @@ def requeue_job(conn: sqlite3.Connection, job_id: str, error: str | None = None)
         """,
         (now, error, job_id),
     )
+
+
+def request_cancel(conn: sqlite3.Connection, job_id: str) -> bool:
+    """Ask a job to stop. Returns whether the request changed anything.
+
+    Only a ``queued`` or ``running`` job can be cancelled. The transition to
+    ``cancelled`` is written immediately — even for a ``running`` job — because
+    the worker polls this column between plies (:func:`server.worker.should_cancel`);
+    there is no in-process channel from the API to the worker, so the database is
+    the signal. A job that was already ``done``/``failed``/``cancelled`` is left
+    alone and reported as "nothing to do", so a double-click is harmless.
+    """
+    now = utcnow()
+    cursor = conn.execute(
+        """
+        UPDATE jobs
+           SET status = 'cancelled', finished_at = ?, updated_at = ?
+         WHERE id = ? AND status IN ('queued', 'running')
+        """,
+        (now, now, job_id),
+    )
+    return cursor.rowcount > 0
