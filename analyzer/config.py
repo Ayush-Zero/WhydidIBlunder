@@ -46,6 +46,16 @@ def stockfish_hash_mb() -> int:
     return _int("STOCKFISH_HASH_MB", 256)
 
 
+def cache_dir() -> str | None:
+    """Where the position-eval cache lives; ``None``/empty disables caching.
+
+    Read from ``CACHE_DIR``. Caching is **off by default** on purpose: it is a
+    correctness-critical optimisation, so it should be switched on deliberately
+    (in ``.env``), not inherited by accident from a fresh checkout.
+    """
+    return os.getenv("CACHE_DIR", "").strip() or None
+
+
 def analysis_thresholds() -> Thresholds:
     """Classification cut-offs from env, in win%-points of drop.
 

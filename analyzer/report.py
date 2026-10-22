@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import chess.pgn
 
-from .config import (
-    analysis_depth,
+from .cache import MemoryPositionCache, PositionCache
+from .config import (    analysis_depth,
     analysis_multipv,
+    cache_dir,
     stockfish_hash_mb,
     stockfish_path,
     stockfish_threads,
@@ -116,6 +117,21 @@ def build_report(
     }
 
 
+def default_cache() -> PositionCache | None:
+    """The process-wide cache implied by config, or ``None`` when disabled.
+
+    ``CACHE_DIR`` unset means caching is off — a deliberate default, because a
+    cache is a correctness-bearing optimisation and should be turned on by
+    intent, not inherited by accident from a fresh checkout.
+
+    The SQLite-backed implementation lands in Phase 2 B; until then the only
+    backends are in-memory (useful within one process) and disabled.
+    """
+    if cache_dir() is None:
+        return None
+    return MemoryPositionCache()
+
+
 # --------------------------------------------------------------------------- #
 # public entry point
 # --------------------------------------------------------------------------- #
@@ -126,12 +142,16 @@ def analyze_game(
     engine: Engine | None = None,
     depth: int | None = None,
     multipv: int | None = None,
+    cache: PositionCache | None = None,
 ) -> dict:
     """Analyse the first game in ``pgn_text`` for ``color`` and return the report dict.
 
     ``color`` must be ``"white"`` or ``"black"`` — it selects whose moves the
     summary covers. If no ``engine`` is supplied, one is launched from config and
     closed on exit. ``depth``/``multipv`` default to the configured values.
+
+    ``cache`` (B1) is passed through to the move loop so repeated positions are
+    searched once; see :func:`analyzer.pipeline.analyse_game_moves`.
 
     The labels and ``summary.accuracy`` are our own win%-based model (a
     Lichess-style curve plus win%-point thresholds). They are close in spirit to
@@ -155,7 +175,9 @@ def analyze_game(
         )
     try:
         game = read_game(pgn_text)
-        moves = analyse_game_moves(game, engine=engine, depth=depth, multipv=multipv)
+        moves = analyse_game_moves(
+            game, engine=engine, depth=depth, multipv=multipv, cache=cache
+        )
         return build_report(game, moves, color, engine.name, depth, multipv)
     finally:
         if own_engine:

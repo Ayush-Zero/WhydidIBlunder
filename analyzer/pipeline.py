@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 import chess
 import chess.pgn
 
+from .cache import PositionCache
 from .config import (
     analysis_depth,
     analysis_multipv,
@@ -62,12 +63,50 @@ def _side_name(color: chess.Color) -> str:
     return "white" if color == chess.WHITE else "black"
 
 
+def _analyse_cached(
+    engine: Engine,
+    board: chess.Board,
+    depth: int,
+    multipv: int,
+    cache: PositionCache | None,
+) -> list:
+    """``engine.analyse`` with the B1 cache in front of it.
+
+    A cache *hit at a deeper depth than requested* is returned as-is rather than
+    truncated, because more search is strictly better — the caller only reads the
+    lines, and the depth actually used is recorded in the report's engine header
+    by :mod:`analyzer.report`.
+    """
+    if cache is None:
+        return engine.analyse(board, depth=depth, multipv=multipv)
+
+    hit = cache.lookup(
+        fen=board.fen(),
+        engine_version=PositionCache.engine_version(engine),
+        depth=depth,
+        multipv=multipv,
+    )
+    if hit is not None:
+        return hit[1]
+
+    lines = engine.analyse(board, depth=depth, multipv=multipv)
+    cache.store(
+        fen=board.fen(),
+        engine_version=PositionCache.engine_version(engine),
+        depth=depth,
+        multipv=multipv,
+        value=lines,
+    )
+    return lines
+
+
 def analyse_game_moves(
     game: chess.pgn.Game,
     *,
     engine: Engine,
     depth: int | None = None,
     multipv: int | None = None,
+    cache: PositionCache | None = None,
 ) -> list[MoveReport]:
     """Analyse every move of ``game``.
 
@@ -76,6 +115,13 @@ def analyse_game_moves(
 
     ``depth``/``multipv`` default to the configured values
     (``ANALYSIS_DEPTH`` / ``ANALYSIS_MULTIPV``) — they are never hardcoded here.
+
+    ``cache`` (B1) is consulted before every engine call and filled after it, so
+    a repeated position — across games, not just within one — is searched once.
+    ``None`` means "no cache" and is the default: caching is a correctness-bearing
+    optimisation, so it is switched on deliberately (``CACHE_DIR``) rather than
+    inherited. ``tests/test_cache_wiring.py`` pins both the hit path and the
+    fact that an engine bump invalidates it.
     """
     depth = analysis_depth() if depth is None else depth
     multipv = analysis_multipv() if multipv is None else multipv
@@ -94,7 +140,7 @@ def analyse_game_moves(
 
     # positions 0..n, each analysed exactly once; terminal positions are skipped
     analyses = [
-        None if b.is_game_over() else engine.analyse(b, depth=depth, multipv=multipv)
+        None if b.is_game_over() else _analyse_cached(engine, b, depth, multipv, cache)
         for b in boards
     ]
 
@@ -206,8 +252,9 @@ def analyse_moves(
     engine: Engine,
     depth: int | None = None,
     multipv: int | None = None,
+    cache: PositionCache | None = None,
 ) -> list[MoveReport]:
     """Convenience: parse the first game in ``pgn_text`` and analyse its moves."""
     return analyse_game_moves(
-        read_game(pgn_text), engine=engine, depth=depth, multipv=multipv
+        read_game(pgn_text), engine=engine, depth=depth, multipv=multipv, cache=cache
     )

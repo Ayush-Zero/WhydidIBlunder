@@ -25,7 +25,7 @@
 | ID | Part | Deliverable | Done when |
 |----|------|-------------|-----------|
 | **A1** | SQLite schema + migrations | Tables `jobs`, `position_eval`, `moves`, `game_reports`; WAL enabled; a migration/init path | ✅ Done — `server/db.py`, `tests/test_db.py`, `docs/storage.md` |
-| **A2** | App skeleton + config | FastAPI app, settings from `.env`, structured logging, `/health` | `uvicorn` boots; `/health` returns OK; no secrets logged |
+| **A2** | App skeleton + config | FastAPI app, settings from `.env`, structured logging, `/health` | ✅ Done — `server/app.py`, `server/logging_setup.py`, `server/main.py`, `tests/test_app.py` |
 | **A3** | Chess.com client (server-side) | Fetch archives + a month's games; **cache responses**; handle **empty months (404)**, **bots**, **"from position" games**, and games with **no `uuid`** (fall back to `url`/`link` as the key) | ✅ Done — `server/chesscom.py`, `tests/test_chesscom.py` over recorded JSON |
 
 ---
@@ -34,7 +34,7 @@
 
 | ID | Part | Deliverable | Done when |
 |----|------|-------------|-----------|
-| **B1** | **Position cache (`fen_key`)** | Normalise FEN (strip fullmove counter; **include halfmove clock — decide explicitly**); **include engine version/build**; serve a cached row only when its **depth ≥ requested** | Tests prove hit/miss, the depth rule, and that an **engine bump invalidates** the cache (poisoning test) |
+| **B1** | **Position cache (`fen_key`)** | Normalise FEN (strip fullmove counter; **include halfmove clock — decide explicitly**); **include engine version/build**; serve a cached row only when its **depth ≥ requested** | ✅ Done — `analyzer/cache.py`, `docs/cache.md`, `tests/test_cache.py`, `tests/test_cache_wiring.py` (SQLite backend pending in B) |
 | **B2** | Atomic job claim | `BEGIN IMMEDIATE` + `PRAGMA busy_timeout`; `UPDATE … RETURNING id` sets `running`, `worker_id`, `started_at` | Concurrent-claim test: two workers never claim the same job; no `database is locked` |
 | **B3** | Worker loop | Claim queued job → run `analyze_game`, persisting per-ply `moves` + progress; **check cancel between plies**; finalise `game_report` + job status | One job runs end to end; progress advances; status goes `queued → running → done` |
 | **B4** | **Stale-job reaper** | Periodic sweep returns `running` jobs older than the hard timeout to `queued`/`failed` | Kill a worker mid-job → reaper requeues it → it completes |
@@ -105,12 +105,15 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
 ## Suggested first three steps
 
 1. ~~**A1** — SQLite schema~~ ✅ done; see `docs/storage.md` for the key decisions.
-2. **B1** — the `fen_key` definition + tests (the cache is the sneakiest bug).
+   ~~**A2** — app skeleton~~ ✅ done. ~~**A3** — Chess.com client~~ ✅ done.
+   **Milestone A is complete.**
+2. ~~**B1** — the `fen_key` definition + tests~~ ✅ done; see `docs/cache.md`. The
+   SQLite backend for it belongs with B2/B3 (it needs a connection anyway).
 3. **B2 → B3** — atomic claim + worker loop (the concurrency core).
+4. **B4 → B5** — the reaper and the hard timeout. Both are required: B4 covers
+   worker *process death*, which a job timeout cannot.
 
-> A2 (the FastAPI app skeleton) is still outstanding and is a prerequisite for
-> Milestone C; A1 and A3 were built first because neither needs it and both are
-> on the critical path for someone else.
+> Milestone C needs B3 (there is nothing to poll until jobs run).
 
 > Dependency note: Phase 2's worker calls the Phase 1 `analyze_game(pgn, color)
 > -> dict`. Phase 1's **frozen output schema (A1)** and **pure-logic tests** are
