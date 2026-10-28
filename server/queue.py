@@ -40,6 +40,8 @@ __all__ = [
     "claim_job",
     "complete_job",
     "fail_job",
+    "jobq_max_attempts",
+    "reap_stale_jobs",
     "record_progress",
     "request_cancel",
     "requeue_job",
@@ -243,3 +245,75 @@ def request_cancel(conn: sqlite3.Connection, job_id: str) -> bool:
         (now, now, job_id),
     )
     return cursor.rowcount > 0
+
+
+# --------------------------------------------------------------------------- #
+# reaper (B4) + helpers
+# --------------------------------------------------------------------------- #
+def _parse_ts(ts: str | None):
+    if not ts:
+        return None
+    from datetime import datetime
+
+    try:
+        # ISO-8601 from utcnow() (e.g. 2026-10-28T12:34:56+00:00)
+        return datetime.fromisoformat(str(ts))
+    except Exception:
+        return None
+
+
+def jobq_max_attempts(max_attempts: int | None = None) -> int:
+    if max_attempts is None:
+        return MAX_ATTEMPTS
+    return int(max_attempts)
+
+
+def reap_stale_jobs(
+    conn: sqlite3.Connection,
+    *,
+    timeout_seconds: int,
+    max_attempts: int | None = None,
+    now_iso: str | None = None,
+):
+    """Return ``running`` jobs that have gone quiet to ``queued`` or ``failed``.
+
+    The key is ``heartbeat_at`` (not ``started_at``), because a large analysis
+    may legitimately exceed the timeout while being healthy; a dead worker stops
+    refreshing the heartbeat. Jobs that have exceeded ``MAX_ATTEMPTS`` become
+    ``failed`` rather than looping forever.
+
+    ``requeue_job`` clears ``worker_id``/``started_at``/``heartbeat_at`` so the
+    next claim takes ownership cleanly.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    limit = jobq_max_attempts(max_attempts)
+    now = _parse_ts(now_iso) or datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=int(timeout_seconds))
+
+    rows = conn.execute(
+        """
+        SELECT id, worker_id, attempts, heartbeat_at, started_at, error
+          FROM jobs
+         WHERE status = 'running'
+        """
+    ).fetchall()
+
+    requeued = 0
+    failed = 0
+    for row in rows:
+        hb = _parse_ts(row["heartbeat_at"]) or _parse_ts(row["started_at"])
+        if hb is None:
+            continue
+        if hb > cutoff:
+            continue
+        attempts = int(row["attempts"] or 0)
+        reason = f"reaped: no heartbeat since {row['heartbeat_at'] or row['started_at']}"
+        if attempts >= limit:
+            fail_job(conn, row["id"], reason)
+            failed += 1
+        else:
+            requeue_job(conn, row["id"], reason)
+            requeued += 1
+
+    return {"requeued": requeued, "failed": failed}

@@ -74,3 +74,13 @@ def analysis_thresholds() -> Thresholds:
 def suppression_win_pts() -> float:
     """``SUPPRESS_WIN_PTS`` env: gap to the best line that is never flagged."""
     return _float("SUPPRESS_WIN_PTS", SUPPRESS_WIN_PTS)
+
+
+def job_timeout_seconds() -> int:
+    """Hard timeout for a running job (seconds)."""
+    return _int("JOB_TIMEOUT_SECONDS", 180)
+
+
+def reaper_interval_seconds() -> int:
+    """How often the reaper runs (seconds)."""
+    return _int("REAPER_INTERVAL_SECONDS", 30)

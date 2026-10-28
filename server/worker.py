@@ -41,7 +41,7 @@ from analyzer.pipeline import MoveReport, iter_game_moves, read_game
 from analyzer.report import build_report, move_to_dict
 from server import db
 from server.position_cache import SqlitePositionCache
-from server.queue import claim_job, complete_job, fail_job, record_progress
+from server.queue import claim_job, complete_job, fail_job, reap_stale_jobs, record_progress
 
 __all__ = ["Worker", "JobCancelled", "default_cache_for", "should_cancel"]
 
@@ -110,6 +110,7 @@ class Worker:
         engine_factory=None,
         sleep_seconds: float = 1.0,
         heartbeat_every: int = 1,
+        run_reaper: bool = True,
     ) -> None:
         self.db_path = db_path
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
@@ -121,6 +122,9 @@ class Worker:
         #: How often to write a heartbeat, in plies. 1 means every ply; larger
         #: values reduce writes on long games at the cost of coarser liveness.
         self.heartbeat_every = max(1, int(heartbeat_every))
+        #: The reaper runs inside this worker process for simplicity in dev/tests.
+        #: Disable in tests where timing must be controlled explicitly.
+        self.run_reaper = run_reaper
 
     # -- engine ---------------------------------------------------------
     def _open_engine(self):
@@ -279,12 +283,34 @@ class Worker:
         Sleeps only when the queue was empty. A ``lost_race`` claim (B2) means
         another worker is making progress, so retrying immediately is right and
         sleeping would waste the moment.
+
+        The reaper (B4) runs periodically inside the worker process to recover
+        jobs left behind by a dead worker; it keys off ``heartbeat_at``.
         """
+        from analyzer import config
+
         conn = db.connect(self.db_path)
         db.init_db(conn)
         done = 0
+        last_reap = 0.0
+        reaper_interval = config.reaper_interval_seconds()
+        timeout = config.job_timeout_seconds()
         try:
             while stop_after is None or done < stop_after:
+                now = time.monotonic()
+                if self.run_reaper and reaper_interval > 0 and now - last_reap >= reaper_interval:
+                    try:
+                        report = reap_stale_jobs(conn, timeout_seconds=timeout)
+                        if report["requeued"] or report["failed"]:
+                            log.info(
+                                "reaper swept stale jobs",
+                                extra=report,
+                            )
+                    except Exception:  # noqa: BLE001 - reaper must not kill the worker
+                        log.exception("reaper failed")
+                    finally:
+                        last_reap = now
+
                 result = self.run_once(conn)
                 if result is None:
                     if stop_after is not None:

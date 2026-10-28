@@ -134,6 +134,90 @@ def test_a_fresh_claim_is_never_already_stale(conn):
     assert row["heartbeat_at"] == row["started_at"]
 
 
+# --- reaper (B4) -----------------------------------------------------------
+
+
+def test_reaper_requeues_a_stale_running_job(conn):
+    """A job with a dead worker has no heartbeat -> reaped back to queued."""
+    _enqueue(conn)
+    jobq.claim_job(conn, "worker-dead")
+    # Make it look like the worker died an hour ago.
+    conn.execute(
+        "UPDATE jobs SET heartbeat_at = '2000-01-01T00:00:00+00:00' WHERE id = 'job-1'"
+    )
+    result = jobq.reap_stale_jobs(conn, timeout_seconds=180)
+    row = db.get_job(conn, "job-1")
+    assert row["status"] == "queued"
+    assert row["worker_id"] is None
+    assert row["started_at"] is None
+    assert row["heartbeat_at"] is None
+    assert result["requeued"] == 1
+
+
+def test_reaper_uses_heartbeat_not_started_at(conn):
+    """A long-but-healthy job keeps updating its heartbeat and must NOT be reaped."""
+    _enqueue(conn)
+    jobq.claim_job(conn, "worker-alive")
+    # started long ago, but heartbeat is fresh
+    conn.execute(
+        "UPDATE jobs SET started_at = '2000-01-01T00:00:00+00:00', "
+        "heartbeat_at = ? WHERE id = 'job-1'",
+        (db.utcnow(),),
+    )
+    result = jobq.reap_stale_jobs(conn, timeout_seconds=180)
+    assert db.get_job(conn, "job-1")["status"] == "running"
+    assert result == {"requeued": 0, "failed": 0}
+
+
+def test_reaper_falls_back_to_started_at_if_heartbeat_missing(conn):
+    # Migration 2 added heartbeat_at; a row might lack it in a weird state.
+    _enqueue(conn)
+    jobq.claim_job(conn, "worker-dead")
+    conn.execute(
+        "UPDATE jobs SET heartbeat_at = NULL, started_at = '2000-01-01T00:00:00+00:00' WHERE id = 'job-1'"
+    )
+    result = jobq.reap_stale_jobs(conn, timeout_seconds=180)
+    assert db.get_job(conn, "job-1")["status"] == "queued"
+    assert result["requeued"] == 1
+
+
+def test_reaper_fails_a_poisoned_job_after_max_attempts(conn):
+    _enqueue(conn)
+    jobq.claim_job(conn, "w1")  # attempt 1
+    jobq.requeue_job(conn, "job-1")
+    jobq.claim_job(conn, "w2")  # attempt 2
+    conn.execute(
+        "UPDATE jobs SET heartbeat_at = '2000-01-01T00:00:00+00:00' WHERE id = 'job-1'"
+    )
+    result = jobq.reap_stale_jobs(conn, timeout_seconds=180, max_attempts=2)
+    row = db.get_job(conn, "job-1")
+    assert row["status"] == "failed"
+    assert "reaped" in row["error"]
+    assert result == {"requeued": 0, "failed": 1}
+
+
+def test_reaper_only_touches_running_jobs(conn):
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    jobq.complete_job(conn, "job-1")
+    conn.execute(
+        "UPDATE jobs SET heartbeat_at = '2000-01-01T00:00:00+00:00' WHERE id = 'job-1'"
+    )
+    jobq.reap_stale_jobs(conn, timeout_seconds=180)
+    assert db.get_job(conn, "job-1")["status"] == "done"
+
+
+def test_reaper_never_touches_a_cancelled_job(conn):
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    jobq.request_cancel(conn, "job-1")
+    conn.execute(
+        "UPDATE jobs SET heartbeat_at = '2000-01-01T00:00:00+00:00' WHERE id = 'job-1'"
+    )
+    jobq.reap_stale_jobs(conn, timeout_seconds=180)
+    assert db.get_job(conn, "job-1")["status"] == "cancelled"
+
+
 # --- the concurrency centrepiece ------------------------------------------
 
 

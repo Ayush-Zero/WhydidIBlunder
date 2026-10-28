@@ -100,11 +100,18 @@ treats the whole thing as a comment), rather than raising. So the worker checks
 moves". Without that guard the job would store an empty report and be marked
 `done` — a finished analysis of nothing.
 
+## Reaper (B4)
+
+The worker runs `reap_stale_jobs` periodically (configured by
+`REAPER_INTERVAL_SECONDS`/`JOB_TIMEOUT_SECONDS`). It keys off `heartbeat_at`,
+not `started_at`, so a long-but-healthy analysis is not mistaken for a dead
+worker. A stale job is requeued (up to `MAX_ATTEMPTS`), otherwise marked
+`failed`. This covers **worker process death**, which no in-process timeout can.
+
 ## Not here
 
-- **B4 (reaper)** — the worker does not sweep for stale jobs; nothing moves a
-  dead worker's `running` job back to `queued` yet.
-- **B5 (hard timeout)** — nothing kills a hung Stockfish mid-analysis.
+- **B5 (hard timeout)** — nothing kills a live but hung Stockfish mid-analysis
+  yet.
 - **Retries** — `run_once` fails a job on exception; it does not requeue for
   another attempt. That policy belongs with the reaper, where the attempt count
   is already tracked.

@@ -109,7 +109,20 @@ arrival.
 `requeue_job` clears the worker fields rather than keeping them: a stale
 `worker_id` on a queued job makes it look like someone still owns it.
 
+## Reaper (B4)
+
+`reap_stale_jobs` (in `server/queue.py`) scans for `running` jobs whose
+`heartbeat_at` (or `started_at` as a fallback) has not been updated for
+`JOB_TIMEOUT_SECONDS` seconds. Such a job is assumed to belong to a **dead
+worker** (a timeout would not cover process death). Stale jobs are requeued via
+`requeue_job` (clearing `worker_id`/`started_at`/`heartbeat_at`) unless
+`attempts >= MAX_ATTEMPTS`, in which case they are marked `failed`. The worker
+(`server/worker.py`) runs the reaper periodically; it can also be invoked
+directly for tests. The key is `heartbeat_at`, not `started_at`, so a
+long-but-healthy analysis is never mistaken for a dead one.
+
 ## Not here
 
-The **reaper** and the **hard timeout** are **B4 / B5**. `MAX_ATTEMPTS` is stated
-here so the retry policy has a single home, but it is the reaper that enforces it.
+The **hard timeout** (B5) — killing a live but hung Stockfish mid-search — is
+still outstanding. `MAX_ATTEMPTS` is stated here so the retry policy has a
+single home.

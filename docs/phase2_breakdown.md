@@ -37,7 +37,7 @@
 | **B1** | **Position cache (`fen_key`)** | Normalise FEN (strip fullmove counter; **include halfmove clock — decide explicitly**); **include engine version/build**; serve a cached row only when its **depth ≥ requested** | ✅ Done — key logic in `analyzer/cache.py` (`docs/cache.md`); durable backend in `server/position_cache.py` (B3) |
 | **B2** | Atomic job claim | `BEGIN IMMEDIATE` + `PRAGMA busy_timeout`; `UPDATE … RETURNING id` sets `running`, `worker_id`, `started_at` | ✅ Done — `server/queue.py`, `docs/queue.md`, `tests/test_queue.py` (migration 2 adds `heartbeat_at`) |
 | **B3** | Worker loop | Claim queued job → run `analyze_game`, persisting per-ply `moves` + progress; **check cancel between plies**; finalise `game_report` + job status | ✅ Done — `server/worker.py`, `server/position_cache.py`, `server/worker_main.py`, `docs/worker.md`, `tests/test_worker.py` (verified live: 45 plies, accuracy 87.9) |
-| **B4** | **Stale-job reaper** | Periodic sweep returns `running` jobs older than the hard timeout to `queued`/`failed` | Kill a worker mid-job → reaper requeues it → it completes |
+| **B4** | **Stale-job reaper** | Periodic sweep returns `running` jobs older than the hard timeout to `queued`/`failed` | ✅ Done — `server/queue.py` (`reap_stale_jobs`), integrated into `server/worker.py`, `tests/test_queue.py` (keys off `heartbeat_at`) |
 | **B5** | Hard job timeout | Kill stuck Stockfish for the current job | A deliberately-hung analysis is killed; job marked failed/requeued, worker survives |
 
 > B4 exists because a job timeout does **not** cover worker **process death**.
@@ -88,8 +88,8 @@
 
 ```
 A1 ─┬─ B1 ─ B2 ─ B3 ─┬─ C2 ─ C3 ─ C4 ─ D1 ─ D2 ─ D3
-    │                 │
-A2 ─┤                 └─ B5 ─ B4
+    │                │
+A2 ─┤                └─ B5 ─ B4
     │
 A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
                                     └─ D4 ─ D5
@@ -114,8 +114,9 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    ~~**B3** — the worker loop~~ ✅ done; see `docs/worker.md`. The durable cache
    (`server/position_cache.py`) landed with it, since the worker has the
    connection.
-3. **B4 → B5** — the reaper and the hard timeout. Both are required: B4 covers
-   worker *process death*, which a job timeout cannot.
+3. ~~**B4** — the stale-job reaper~~ ✅ done; see `docs/queue.md`/`docs/worker.md`.
+   **B5** — the hard timeout (kill a live but hung Stockfish mid-analysis). B4
+   covers worker *process death*, which a job timeout cannot.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 
