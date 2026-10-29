@@ -6,7 +6,8 @@ behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
 > **Status:** C1 (game list), C2 (request analysis), C3 (poll), C4 (cancel),
 > C5 (report), C6 (explain stub) and C7 (rate limiting) are implemented. C8
-> (ownership / abuse model) is the remaining Milestone C task.
+> (ownership / abuse model) is documented in
+> [`docs/ownership.md`](ownership.md). Milestone C is complete.
 
 ---
 
@@ -247,7 +248,8 @@ Field notes:
 | `503` | The database has not been initialised yet (no worker has run). |
 
 There is no auth (C8): anyone holding the UUID4 can poll it. The id is
-unguessable and carries no secret.
+unguessable and carries no secret. See
+[`docs/ownership.md`](ownership.md) for the full capability model.
 
 ---
 
@@ -300,7 +302,8 @@ Field notes:
 | `503` | The database has not been initialised yet. |
 
 There is no auth (C8): anyone holding the UUID4 can cancel it. The id is
-unguessable and carries no secret.
+unguessable and carries no secret. See
+[`docs/ownership.md`](ownership.md) for the full capability model.
 
 ---
 
@@ -345,7 +348,8 @@ Field notes:
 | `503` | The database has not been initialised yet. |
 
 There is no auth (C8): anyone who knows the key and colour can fetch the report.
-Neither is a secret.
+Neither is a secret. See [`docs/ownership.md`](ownership.md) for the full
+capability model.
 
 ---
 
@@ -458,11 +462,9 @@ all callers share Caddy's bucket, which over-limits rather than bypasses.
 
 ## Not here yet
 
-No endpoint remains. C8 is a documentation task:
-
-| ID | Concern | Milestone |
-|---|---|---|
-| C8 | ownership / abuse model | next |
+No endpoint remains. Milestone C is complete; C8's ownership and abuse model is
+documented in [`docs/ownership.md`](ownership.md). Milestone D (end-to-end
+verification and hardening) is next.
 
 The breakdown writes `game_uuid` for C2/C5; the identifier is **`game_key`**
 for the reason above — not every game has a `uuid`, and the database is keyed on

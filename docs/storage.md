@@ -29,7 +29,8 @@ readers/writers; almost everything hard about Phase 2 is decided here.
 ### `jobs`
 
 Keyed on `id` (a UUID4 — unguessable by design, since there is no auth and
-anyone holding an ID can fetch it).
+anyone holding an ID can fetch it). See [`docs/ownership.md`](ownership.md) for
+the full capability and abuse model.
 
 `game_key` is **not** named `game_uuid` on purpose: games older than chess.com's
 UUID rollout have no `uuid`, and the key falls back to `url` → `link` → a digest

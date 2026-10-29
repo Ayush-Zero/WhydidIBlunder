@@ -12,6 +12,7 @@ Offline throughout: the Chess.com client is injected with a mock transport over
 from __future__ import annotations
 
 import json
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -135,6 +136,8 @@ def test_analyze_queues_a_job_and_stores_the_pgn(tmp_path):
     assert body["user_color"] == "white"
     assert body["game_key"] == WHITE_KEY
     assert body["job_id"]
+    # C8: the job id is an unguessable UUID4, not a sequential or derived value.
+    assert uuid.UUID(body["job_id"]).version == 4
 
     row = _jobs(db_path)[0]
     assert row["id"] == body["job_id"]
@@ -396,6 +399,8 @@ def test_upstream_failure_is_502(tmp_path):
         {"username": "beast-ash", "game_key": "chesscom:x", "months": 0},
         # A typo in the field name must not be silently ignored.
         {"username": "beast-ash", "game_uuid": "chesscom:x"},
+        # C8: the server generates job ids; clients cannot choose one.
+        {"username": "beast-ash", "game_key": "chesscom:x", "job_id": "chosen"},
     ],
 )
 def test_invalid_bodies_are_rejected(tmp_path, payload):

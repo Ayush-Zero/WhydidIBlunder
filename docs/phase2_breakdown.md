@@ -56,7 +56,7 @@
 | **C5** | Fetch report | `GET /api/games/{game_key}/report?user_color=...` | ✅ Done — `server/api.py`, `tests/test_api_report.py`; stored report served verbatim for `(game_key, user_color)`, path-converter keys, 404/422/503. Contract in `docs/api.md` |
 | **C6** | Explain **stub** | `POST /api/explain` | ✅ Done — `server/api.py`, `tests/test_api_explain.py`; accepts `{fen, played, best, pv, tags}`, returns `{explanation, stub: true}`. **No LLM code** (Phase 5). Contract in `docs/api.md` |
 | **C7** | Rate limiting | Per-IP limit (**5 analyses/hour** by default); trust `X-Forwarded-For` **only** from Caddy | ✅ Done — `server/ratelimit.py`, `tests/test_ratelimit.py`, `tests/test_api_ratelimit.py`; sliding window, `429` + `Retry-After`, XFF ignored from a non-proxy. Contract in `docs/api.md` |
-| **C8** | Ownership / abuse model | No auth: **unguessable UUIDs** + rate limit; **never put secrets in IDs** | Written down (README/plan); IDs are UUID4; documented that anyone with an ID can fetch it |
+| **C8** | Ownership / abuse model | No auth: **unguessable UUIDs** + rate limit; **never put secrets in IDs** | ✅ Done — `docs/ownership.md`, linked from `README.md`; UUID4 job IDs, bearer-capability semantics, threat model, deployment rules, and "anyone with an ID can fetch it" documented |
 
 ---
 
@@ -79,7 +79,8 @@
 - [ ] **Reaper verified**: kill a worker, job requeues.
 - [ ] Cache **cannot poison itself**: engine-versioned + depth-aware + normalised key.
 - [x] Rate limit enforced; `X-Forwarded-For` trusted only from Caddy.
-- [ ] No auth by design; unguessable UUIDs; **no secrets in IDs**.
+- [x] No auth by design; unguessable UUIDs; **no secrets in IDs**. See
+  `docs/ownership.md`.
 - [ ] Runs as **1 worker, `Threads=1`, `Hash=256`**; scaling = more processes.
 
 ---
@@ -121,7 +122,8 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    ~~**C2** — request analysis~~ ✅ done, including the active-job dedupe
    (migration 3). ~~**C3** — poll~~ ✅ done. ~~**C4** — cancel~~ ✅ done.
    ~~**C5** — report~~ ✅ done. ~~**C6** — explain stub~~ ✅ done.
-   ~~**C7** — rate limiting~~ ✅ done. **C8** (ownership / abuse docs) is next.
+   ~~**C7** — rate limiting~~ ✅ done. ~~**C8** — ownership / abuse docs~~ ✅
+   done; see `docs/ownership.md`. **D1** (end-to-end happy path) is next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 
