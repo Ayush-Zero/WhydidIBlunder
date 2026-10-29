@@ -1,4 +1,4 @@
-"""Phase 2 C1–C2: the game list and the analysis request.
+"""Phase 2 C1–C3: the game list, the analysis request, and polling.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
@@ -8,6 +8,10 @@ live on the server where they can be tested.
 ``POST /api/analyze`` turns one of those games into a queued job. It owns the
 dedupe rules — a stored report wins over a queued job, an active job wins over a
 new one — because those are API policy, not queue mechanics.
+
+``GET /api/jobs/{job_id}`` is the read side of that queue. It returns the
+persisted prefix of the analysis, which is what makes a long job observable
+without pretending the unfinished part exists.
 
 Three decisions worth stating:
 
@@ -436,3 +440,128 @@ def request_analysis(
         )
     finally:
         connection.close()
+
+
+# --- C3: poll a job -------------------------------------------------------
+
+
+class JobMove(BaseModel):
+    """One persisted ply, in the same wire shape as a report move.
+
+    The storage row also carries ``fen_before``/``fen_after``; they are
+    deliberately omitted here because they are storage detail and would bloat a
+    response that is polled repeatedly.
+    """
+
+    ply: int
+    move_number: int
+    side: Literal["white", "black"]
+    san: str
+    best_san: str
+    pv_san: list[str]
+    eval_before_cp: int
+    eval_after_cp: int
+    eval_before_win_pct: float
+    eval_after_win_pct: float
+    mate_before: int | None = None
+    mate_after: int | None = None
+    played_rank: int | None = None
+    drop_win_pct: float
+    classification: Literal["ok", "inaccuracy", "mistake", "blunder"]
+    tags: list[str]
+    suppressed: bool
+    suppress_reason: str
+
+
+class JobStatus(BaseModel):
+    """A job's state plus the part of its analysis that actually exists."""
+
+    job_id: str
+    status: Literal["queued", "running", "done", "failed", "cancelled"]
+    game_key: str
+    user_color: Literal["white", "black"]
+    #: Number of plies whose results are available. At least ``len(moves)``:
+    #: a crash can persist a move before the progress counter advances, so the
+    #: API reports the truthful prefix rather than the stale checkpoint.
+    progress_ply: int
+    moves: list[JobMove]
+    #: The worker's failure reason, or ``None`` for every other status.
+    error: str | None = None
+
+
+def _job_move(row: sqlite3.Row) -> JobMove:
+    """Map a ``moves`` row onto the public move shape."""
+    return JobMove(
+        ply=row["ply"],
+        move_number=row["move_number"],
+        side=row["side"],
+        san=row["san"],
+        best_san=row["best_san"],
+        pv_san=json.loads(row["pv_san"] or "[]"),
+        eval_before_cp=row["eval_before_cp"],
+        eval_after_cp=row["eval_after_cp"],
+        eval_before_win_pct=row["eval_before_win_pct"],
+        eval_after_win_pct=row["eval_after_win_pct"],
+        mate_before=row["mate_before"],
+        mate_after=row["mate_after"],
+        played_rank=row["played_rank"],
+        drop_win_pct=row["drop_win_pct"],
+        classification=row["classification"],
+        tags=json.loads(row["tags"] or "[]"),
+        suppressed=bool(row["suppressed"]),
+        suppress_reason=row["suppress_reason"],
+    )
+
+
+@api_router.get(
+    "/jobs/{job_id}",
+    response_model=JobStatus,
+    summary="Poll a job's status and partial results",
+)
+def job_status(
+    request: Request,
+    job_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="The job_id returned by POST /api/analyze.",
+    ),
+) -> JobStatus:
+    """Return one job's state and the plies persisted so far.
+
+    This is deliberately a read-only view. Polling must not advance, retry or
+    otherwise touch the job: a status check that changes state is impossible to
+    reason about, and a browser polling every second would become a second
+    scheduler.
+
+    Partial results survive ``failed`` and ``cancelled`` jobs. They are what the
+    worker actually wrote, which is more useful than pretending the analysis
+    does not exist because it did not finish.
+    """
+    connection = db.connect(request.app.state.db_path)
+    try:
+        try:
+            job = db.get_job(connection, job_id)
+            if job is None:
+                raise HTTPException(
+                    status_code=404, detail=f"job {job_id!r} not found"
+                )
+            moves = db.list_moves(connection, job_id)
+        except sqlite3.OperationalError as exc:
+            # A fresh deployment can be polled before any worker has migrated
+            # the file. That is "not ready", not a bug in this endpoint.
+            raise HTTPException(
+                status_code=503, detail="database is not ready"
+            ) from exc
+    finally:
+        connection.close()
+
+    return JobStatus(
+        job_id=job["id"],
+        status=job["status"],
+        game_key=job["game_key"],
+        user_color=job["user_color"],
+        progress_ply=max(int(job["progress_ply"]), len(moves)),
+        moves=[_job_move(row) for row in moves],
+        error=job["error"],
+    )

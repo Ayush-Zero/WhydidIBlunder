@@ -4,9 +4,9 @@ The API is versioned by its URL prefix (`/api`) and documented live at
 `/api/docs` (OpenAPI at `/api/openapi.json`). This file records the decisions
 behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
-> **Status:** C1 (game list) and C2 (request analysis) are implemented. Polling,
-> cancel and report (C3–C5), the explain stub (C6) and rate limiting (C7) are
-> not yet mounted.
+> **Status:** C1 (game list), C2 (request analysis) and C3 (poll) are
+> implemented. Cancel and report (C4–C5), the explain stub (C6) and rate
+> limiting (C7) are not yet mounted.
 
 ---
 
@@ -172,12 +172,89 @@ harmless, analysing them is not.
 
 ---
 
+## C3 — `GET /api/jobs/{job_id}`
+
+Polls one job. Returns its state and the part of the analysis that has actually
+been persisted. This is what makes a long job observable without pretending the
+unfinished part exists.
+
+### Response — `200`
+
+```json
+{
+  "job_id": "6f1c0a52-...",
+  "status": "running",
+  "game_key": "chesscom:7515eb15-...",
+  "user_color": "white",
+  "progress_ply": 12,
+  "moves": [
+    {
+      "ply": 1,
+      "move_number": 1,
+      "side": "white",
+      "san": "e4",
+      "best_san": "e4",
+      "pv_san": ["e4", "e5", "Nf3"],
+      "eval_before_cp": 30,
+      "eval_after_cp": 28,
+      "eval_before_win_pct": 54.2,
+      "eval_after_win_pct": 53.9,
+      "mate_before": null,
+      "mate_after": null,
+      "played_rank": 1,
+      "drop_win_pct": 0.3,
+      "classification": "ok",
+      "tags": [],
+      "suppressed": true,
+      "suppress_reason": "best move"
+    }
+  ],
+  "error": null
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `queued` | Waiting for a worker; `moves` is empty. |
+| `running` | A worker holds it; `moves` is the persisted prefix. |
+| `done` | Finished; the full report is available in C5. |
+| `failed` | Stopped with an `error`; partial moves remain. |
+| `cancelled` | Stopped by C4; partial moves remain. |
+
+Field notes:
+
+- **`moves` is in ply order and uses the same shape as a report move.** The
+  storage row's `fen_before`/`fen_after` are deliberately omitted: they are
+  storage detail, and this response is polled repeatedly.
+- **`progress_ply` is at least `len(moves)`.** A crash can persist a move before
+  the worker advances its progress checkpoint, so the API reports the truthful
+  persisted prefix rather than the stale counter.
+- **Partial results survive `failed` and `cancelled`.** They are what the worker
+  actually wrote; deleting them because the job did not finish would throw away
+  real analysis.
+- **`error` is set only for `failed`**, and carries the worker's reason
+  (truncated).
+- **Polling never mutates the job.** It is a read-only view; a status check that
+  changes state would be a second scheduler.
+
+### Errors
+
+| Status | When |
+|---|---|
+| `404` | No job with that id. |
+| `422` | The id fails path validation (empty, or longer than 64 chars). |
+| `503` | The database has not been initialised yet (no worker has run). |
+
+There is no auth (C8): anyone holding the UUID4 can poll it. The id is
+unguessable and carries no secret.
+
+---
+
 ## Not here yet
 
 | ID | Endpoint | Milestone |
 |---|---|---|
-| C3 | `GET /api/jobs/{id}` | next |
-| C4 | `POST /api/jobs/{id}/cancel` | C |
+| C4 | `POST /api/jobs/{id}/cancel` | next |
 | C5 | `GET /api/games/{game_key}/report` | C |
 | C6 | `POST /api/explain` (stub) | C |
 | C7 | per-IP rate limiting | C |
