@@ -1,4 +1,4 @@
-"""Phase 2 C1–C4: the game list, the analysis request, polling, and cancel.
+"""Phase 2 C1–C5: the game list, analysis, polling, cancel, and the report.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
@@ -16,6 +16,9 @@ without pretending the unfinished part exists.
 ``POST /api/jobs/{job_id}/cancel`` is the write side: it flips the status row,
 and the worker notices between plies. The API never talks to the engine
 process directly; the database is the only channel.
+
+``GET /api/games/{game_key}/report`` serves the frozen Phase 1 report that the
+worker stored. It is a pure read: no engine, no Chess.com fetch, no reshaping.
 
 Three decisions worth stating:
 
@@ -640,3 +643,66 @@ def cancel_job(
         status=job["status"],
         cancelled=bool(changed and job["status"] == "cancelled"),
     )
+
+
+# --- C5: fetch a stored report -------------------------------------------
+
+
+@api_router.get(
+    "/games/{game_key:path}/report",
+    summary="Fetch the stored analysis report for a game",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The frozen Phase 1 report, exactly as the worker stored it.",
+            "content": {"application/json": {"schema": {"type": "object"}}},
+        },
+        404: {"description": "No report for this game and colour."},
+    },
+)
+def get_game_report(
+    request: Request,
+    game_key: str = Path(
+        ...,
+        min_length=1,
+        max_length=2048,
+        description="Opaque key from C1; may contain ':' and '/'.",
+    ),
+    user_color: Literal["white", "black"] = Query(
+        ...,
+        description="Which side the report covers; reports are stored per colour.",
+    ),
+) -> Response:
+    """Return the stored report for ``(game_key, user_color)`` verbatim.
+
+    The body is the frozen Phase 1 report (``docs/analyzer-schema.md``), not a
+    re-serialised approximation: the worker's ``report_json`` is served as-is so
+    the API cannot drift from the schema by adding or dropping fields.
+
+    ``user_color`` is required because the same game can be analysed from both
+    sides. ``(game_key, user_color)`` is the storage key, and a default would
+    silently return the other player's report.
+
+    The key may contain ``:`` and ``/`` (URL-derived keys), so the route uses a
+    path converter rather than a single-segment parameter. Clients should
+    URL-encode reserved characters such as ``?``, ``#`` and ``%``.
+    """
+    connection = db.connect(request.app.state.db_path)
+    try:
+        try:
+            row = db.get_report(connection, game_key, user_color)
+            body = None if row is None else row["report_json"]
+        except sqlite3.OperationalError as exc:
+            # Read-only, like C3/C4: a fresh deployment has no schema yet.
+            raise HTTPException(
+                status_code=503, detail="database is not ready"
+            ) from exc
+    finally:
+        connection.close()
+
+    if body is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no report for game {game_key!r} as {user_color}",
+        )
+    return Response(content=body, media_type="application/json")

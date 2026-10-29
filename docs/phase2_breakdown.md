@@ -53,7 +53,7 @@
 | **C2** | Request analysis | `POST /api/analyze {username, game_key} → {job_id}` | ✅ Done — `server/api.py`, `tests/test_api_analyze.py`; reuses a stored report or active job, 202/200. Contract in `docs/api.md` |
 | **C3** | Poll job | `GET /api/jobs/{id}` | ✅ Done — `server/api.py`, `tests/test_api_jobs.py`; status, `progress_ply`, persisted partial moves, `error`. Contract in `docs/api.md` |
 | **C4** | Cancel job | `POST /api/jobs/{id}/cancel` | ✅ Done — `server/api.py`, `tests/test_api_cancel.py`; queued/running → `cancelled` immediately, idempotent, partial moves kept. Contract in `docs/api.md` |
-| **C5** | Fetch report | `GET /api/games/{game_key}/report` | Returns the stored full report |
+| **C5** | Fetch report | `GET /api/games/{game_key}/report?user_color=...` | ✅ Done — `server/api.py`, `tests/test_api_report.py`; stored report served verbatim for `(game_key, user_color)`, path-converter keys, 404/422/503. Contract in `docs/api.md` |
 | **C6** | Explain **stub** | `POST /api/explain` | Route exists, returns a placeholder; **no LLM code** (that's Phase 5) |
 | **C7** | Rate limiting | Per-IP limit (e.g. **5 analyses/hour**); trust `X-Forwarded-For` **only** from Caddy | 6th request in the window → `429`; spoofed XFF from a non-proxy is ignored |
 | **C8** | Ownership / abuse model | No auth: **unguessable UUIDs** + rate limit; **never put secrets in IDs** | Written down (README/plan); IDs are UUID4; documented that anyone with an ID can fetch it |
@@ -120,7 +120,7 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
 4. ~~**C1** — the game list~~ ✅ done; see `docs/api.md`.
    ~~**C2** — request analysis~~ ✅ done, including the active-job dedupe
    (migration 3). ~~**C3** — poll~~ ✅ done. ~~**C4** — cancel~~ ✅ done.
-   **C5** (report) is next.
+   ~~**C5** — report~~ ✅ done. **C6** (explain stub) is next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

@@ -117,7 +117,7 @@ opaque key.
 
 ## Deliberately not here yet
 
-- **Queue-facing endpoints beyond C1/C2** — **C3–C7**. The worker, reaper and
+- **The explain stub and rate limiting** — **C6–C7**. The worker, reaper and
   durable cache are built (`server/worker.py`, `server/queue.py`,
-  `server/position_cache.py`); the API surface for polling, cancel and report is
-  not.
+  `server/position_cache.py`); polling (C3), cancel (C4) and the stored report
+  (C5) are mounted.

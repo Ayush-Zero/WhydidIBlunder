@@ -4,9 +4,9 @@ The API is versioned by its URL prefix (`/api`) and documented live at
 `/api/docs` (OpenAPI at `/api/openapi.json`). This file records the decisions
 behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
-> **Status:** C1 (game list), C2 (request analysis), C3 (poll) and C4 (cancel)
-> are implemented. The report (C5), the explain stub (C6) and rate limiting
-> (C7) are not yet mounted.
+> **Status:** C1 (game list), C2 (request analysis), C3 (poll), C4 (cancel) and
+> C5 (report) are implemented. The explain stub (C6) and rate limiting (C7) are
+> not yet mounted.
 
 ---
 
@@ -304,12 +304,56 @@ unguessable and carries no secret.
 
 ---
 
+## C5 — `GET /api/games/{game_key}/report?user_color=...`
+
+Returns the stored analysis for one game and one side. It is a pure read: no
+engine, no Chess.com fetch, no reshaping. The body is the frozen Phase 1 report
+described in [`analyzer-schema.md`](analyzer-schema.md), exactly as the worker
+wrote it to `game_reports.report_json`.
+
+### Response — `200`
+
+```json
+{
+  "schema_version": 1,
+  "game": { "white": { "...": "..." }, "black": { "...": "..." } },
+  "engine": { "name": "Stockfish 17", "depth": 12, "multipv": 4 },
+  "moves": [ { "ply": 1, "san": "e4", "...": "..." } ],
+  "summary": { "moves_analysed": 42, "accuracy": 87.9, "...": "..." }
+}
+```
+
+Field notes:
+
+- **`user_color` is required.** A game can be analysed from both sides, and
+  `(game_key, user_color)` is the storage key. There is no default: defaulting
+  would silently return the other player's report.
+- **The body is served verbatim.** The API does not re-serialise the report, so
+  it cannot drift from the frozen schema by adding or dropping fields.
+- **`game_key` is opaque and may contain `:` and `/`.** A3 can fall back to
+  `chesscom-url:https://...`, so the route uses a path converter. Clients should
+  URL-encode reserved characters such as `?`, `#` and `%`.
+- **The report does not need its job.** `game_reports.job_id` is
+  `ON DELETE SET NULL`; a report that outlived its job row is still served.
+
+### Errors
+
+| Status | When |
+|---|---|
+| `404` | No report for this `(game_key, user_color)`, including when only the other colour has one. |
+| `422` | Missing or invalid `user_color`, or an over-long key. |
+| `503` | The database has not been initialised yet. |
+
+There is no auth (C8): anyone who knows the key and colour can fetch the report.
+Neither is a secret.
+
+---
+
 ## Not here yet
 
 | ID | Endpoint | Milestone |
 |---|---|---|
-| C5 | `GET /api/games/{game_key}/report` | next |
-| C6 | `POST /api/explain` (stub) | C |
+| C6 | `POST /api/explain` (stub) | next |
 | C7 | per-IP rate limiting | C |
 
 The breakdown writes `game_uuid` for C2/C5; the identifier is **`game_key`**
