@@ -117,7 +117,7 @@ opaque key.
 
 ## Deliberately not here yet
 
-- **Rate limiting** — **C7**. The worker, reaper and durable cache are built
-  (`server/worker.py`, `server/queue.py`, `server/position_cache.py`); polling
-  (C3), cancel (C4), the stored report (C5) and the explain stub (C6) are
-  mounted. C6 deliberately does not touch this database.
+- **Rate-limit counters** — C7 keeps them in memory (`server/ratelimit.py`), per
+  API process, rather than adding a write to every analysis request. Moving them
+  into this database is the prerequisite for running more than one API worker.
+- **Ownership / abuse model** — C8 is documentation; there is no auth table.

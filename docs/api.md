@@ -5,8 +5,8 @@ The API is versioned by its URL prefix (`/api`) and documented live at
 behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
 > **Status:** C1 (game list), C2 (request analysis), C3 (poll), C4 (cancel),
-> C5 (report) and C6 (explain stub) are implemented. Rate limiting (C7) is not
-> yet mounted.
+> C5 (report), C6 (explain stub) and C7 (rate limiting) are implemented. C8
+> (ownership / abuse model) is the remaining Milestone C task.
 
 ---
 
@@ -392,11 +392,77 @@ calls here.
 
 ---
 
+## C7 — rate limiting on `POST /api/analyze`
+
+`POST /api/analyze` is limited to **5 requests per client IP per hour** by
+default. The request that would exceed the limit is a `429`. The limiter runs
+before the Chess.com lookup, so an over-limit caller cannot spend upstream
+requests or Stockfish time. No other endpoint is limited.
+
+### Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RATE_LIMIT_ANALYSES_PER_HOUR` | `5` | Requests per IP per hour. `0` disables. |
+| `TRUSTED_PROXY_IPS` | `127.0.0.1,::1` | Peers whose `X-Forwarded-For` is trusted. |
+
+The window is sliding, not a fixed hourly bucket: a request expires exactly one
+hour after it was made. The counters are in memory and per API process, and the
+map is capped at 10,000 clients (evicting an old client can reset its count),
+and an API restart starts with empty counters. v1 runs one API process; if the
+API is scaled to multiple workers, each gets its own budget, so set the limit
+with that in mind or move the counters into shared storage first.
+
+### Response headers
+
+Every allowed `200`/`202` response carries:
+
+| Header | Meaning |
+|---|---|
+| `X-RateLimit-Limit` | The configured limit. |
+| `X-RateLimit-Remaining` | Requests left in the current window. |
+| `X-RateLimit-Reset` | Seconds until the oldest request expires. |
+
+A denied request is `429` with `Retry-After` (seconds) and the same
+`X-RateLimit-*` headers:
+
+```json
+{"detail": "rate limit exceeded; try again later"}
+```
+
+### What counts
+
+Every analyze request with a valid body counts, including one that reuses a
+stored report, returns `404` for an unknown game, or fails upstream. Those all
+consume API capacity, and counting them keeps the rule simple. A body rejected
+by validation (`422`) is not counted: FastAPI rejects it before the limiter
+runs. The game list, polling, cancel, report, explain and `/health` are never
+counted.
+
+### X-Forwarded-For
+
+The header is trusted **only** when the immediate peer is in
+`TRUSTED_PROXY_IPS`. A direct caller cannot spoof an IP by sending the header.
+When the peer is trusted, the **rightmost** entry is used, because Caddy appends
+the address it actually saw; the leftmost entry is client-controlled. If the
+rightmost entry is malformed, the peer address is used rather than an earlier
+spoofable entry.
+
+The default trusts loopback, which covers Caddy on the same host. In Docker,
+set `TRUSTED_PROXY_IPS` to Caddy's network (for example `172.16.0.0/12`). Do
+not use a range that also contains clients: that would let them be treated as
+proxies. If the API is behind Caddy but `TRUSTED_PROXY_IPS` is left at loopback,
+all callers share Caddy's bucket, which over-limits rather than bypasses.
+
+---
+
 ## Not here yet
 
-| ID | Endpoint | Milestone |
+No endpoint remains. C8 is a documentation task:
+
+| ID | Concern | Milestone |
 |---|---|---|
-| C7 | per-IP rate limiting | next |
+| C8 | ownership / abuse model | next |
 
 The breakdown writes `game_uuid` for C2/C5; the identifier is **`game_key`**
 for the reason above — not every game has a `uuid`, and the database is keyed on

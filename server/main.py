@@ -2,8 +2,8 @@
 
     .\\.venv\\Scripts\\python.exe -m server.main
 
-Reads the database location and CORS origins from ``.env`` (see
-``.env.example``). This is the only module that constructs the app for
+Reads the database location, CORS origins and rate-limit settings from ``.env``
+(see ``.env.example``). This is the only module that constructs the app for
 production, so the app's configuration has exactly one home.
 """
 

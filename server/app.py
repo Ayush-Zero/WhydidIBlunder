@@ -3,8 +3,7 @@
 Deliberately thin. This part exists to prove the service boots, reads its
 settings from one place, logs in a shape a log aggregator can parse, and exposes
 a health check that tells the truth about the database. Endpoints live in
-:mod:`server.api` and are included here; the queue-facing ones (C2+) arrive with
-the rest of Milestone C.
+:mod:`server.api` and are included here; C1–C7 are now mounted.
 
 Two decisions worth stating:
 
@@ -35,6 +34,12 @@ from server import db
 from server.api import api_router
 from server.chesscom import ChessComClient, cache_dir_from_env
 from server.logging_setup import configure_logging, request_id_var
+from server.ratelimit import (
+    RateLimiter,
+    parse_trusted_proxies,
+    rate_limit_per_hour_from_env,
+    trusted_proxies_from_env,
+)
 
 __all__ = ["create_app", "cors_origins"]
 
@@ -60,6 +65,8 @@ def create_app(
     db_path: str | None = None,
     configure_logging_now: bool = True,
     chesscom_client: ChessComClient | None = None,
+    rate_limiter: RateLimiter | None = None,
+    trusted_proxies: str | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -75,6 +82,13 @@ def create_app(
         Override the Chess.com client. Tests inject one backed by recorded JSON
         so the API tests never touch the network. ``None`` builds the production
         client, using ``CHESSCOM_CACHE_DIR`` when it is set.
+    rate_limiter:
+        Override the per-IP limiter. ``None`` builds one from
+        ``RATE_LIMIT_ANALYSES_PER_HOUR``; pass ``RateLimiter(limit=0)`` to
+        disable it explicitly.
+    trusted_proxies:
+        Comma-separated IPs/CIDRs allowed to set ``X-Forwarded-For``. ``None``
+        reads ``TRUSTED_PROXY_IPS`` (loopback by default).
     """
     if configure_logging_now:
         configure_logging()
@@ -83,6 +97,16 @@ def create_app(
         chesscom_client
         if chesscom_client is not None
         else ChessComClient(cache_dir=cache_dir_from_env())
+    )
+    limiter = (
+        rate_limiter
+        if rate_limiter is not None
+        else RateLimiter(limit=rate_limit_per_hour_from_env())
+    )
+    proxies = (
+        trusted_proxies_from_env()
+        if trusted_proxies is None
+        else parse_trusted_proxies(trusted_proxies)
     )
 
     @asynccontextmanager
@@ -107,6 +131,10 @@ def create_app(
     # ``None`` means "read it from config" on every connection, so C2 and
     # /health cannot disagree about which database they mean.
     app.state.db_path = db_path
+    # C7: the limiter and the proxy trust list are process-wide facts, like the
+    # client. Tests inject both; production builds them from env.
+    app.state.rate_limiter = limiter
+    app.state.trusted_proxies = proxies
 
     app.add_middleware(
         CORSMiddleware,
@@ -114,6 +142,14 @@ def create_app(
         allow_credentials=False,  # there is no auth to carry
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
+        # C7's headers are only useful to browser code if CORS exposes them;
+        # without this the UI can see the 429 status but not the retry delay.
+        expose_headers=[
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+        ],
     )
 
     @app.middleware("http")

@@ -1,4 +1,4 @@
-"""Phase 2 C1–C6: the game list, analysis, polling, cancel, report, and explain.
+"""Phase 2 C1–C7: the game list, analysis, polling, cancel, report, explain, and limits.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
@@ -22,6 +22,10 @@ worker stored. It is a pure read: no engine, no Chess.com fetch, no reshaping.
 
 ``POST /api/explain`` is a Phase 2 stub. It accepts the Phase 5 LLM input shape
 and returns a placeholder; no provider keys, prompts or LLM calls live here yet.
+
+``POST /api/analyze`` is rate limited per client IP. ``X-Forwarded-For`` is
+trusted only from a configured proxy, and the rightmost entry is used because
+that is the one the proxy appended.
 
 Three decisions worth stating:
 
@@ -60,6 +64,7 @@ from server.chesscom import (
     is_bot,
     is_from_position,
 )
+from server.ratelimit import client_ip
 
 __all__ = [
     "api_router",
@@ -196,6 +201,45 @@ def _summary(game: dict, username: str) -> GameSummary:
 def _client(request: Request) -> ChessComClient:
     """The one client the app owns (built by ``create_app``)."""
     return request.app.state.chesscom
+
+
+def _enforce_rate_limit(request: Request, response: Response) -> None:
+    """Apply C7's per-IP limit to one analysis request.
+
+    This runs before any Chess.com lookup, so an over-limit caller cannot spend
+    upstream requests or Stockfish time. The key is the client IP, with
+    ``X-Forwarded-For`` trusted only when the immediate peer is a configured
+    proxy (see :mod:`server.ratelimit`).
+
+    Every valid-body analyze request counts, including one that reuses a stored
+    report or fails upstream: those still consume API capacity, and counting
+    them keeps the rule simple. A malformed body is rejected by FastAPI before
+    this function runs, so it cannot be used to burn another client's quota.
+    """
+    limiter = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None or not limiter.enabled:
+        return
+
+    trusted = getattr(request.app.state, "trusted_proxies", ())
+    peer = request.client.host if request.client else None
+    key = client_ip(peer, request.headers.get("x-forwarded-for"), trusted)
+    decision = limiter.check(key)
+
+    headers = {
+        "X-RateLimit-Limit": str(decision.limit),
+        "X-RateLimit-Remaining": str(decision.remaining),
+        "X-RateLimit-Reset": str(decision.reset_after),
+    }
+    if not decision.allowed:
+        headers["Retry-After"] = str(decision.retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail="rate limit exceeded; try again later",
+            headers=headers,
+        )
+
+    for name, value in headers.items():
+        response.headers[name] = value
 
 
 @api_router.get(
@@ -349,6 +393,14 @@ def _reused(
     response_model=AnalyzeResponse,
     status_code=202,
     summary="Queue an analysis for one game",
+    responses={
+        429: {
+            "description": (
+                "Per-IP analysis limit exceeded. Retry after the number of "
+                "seconds in the Retry-After header."
+            )
+        }
+    },
 )
 def request_analysis(
     payload: AnalyzeRequest,
@@ -368,6 +420,8 @@ def request_analysis(
     Depth and MultiPV come from server config, not the request: letting a caller
     choose ``depth=40`` would be a trivial denial-of-service.
     """
+    _enforce_rate_limit(request, response)
+
     try:
         game = _client(request).find_game(
             payload.username, payload.game_key, months=payload.months
