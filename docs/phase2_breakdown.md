@@ -50,10 +50,10 @@
 | ID | Part | Endpoint / concern | Done when |
 |----|------|--------------------|-----------|
 | **C1** | Game list (proxy) | `GET /api/player/{username}/games` | ✅ Done — `server/api.py`, `tests/test_api_games.py`; normalised list, bot/from-position policy, disk-cached. Contract in `docs/api.md` |
-| **C2** | Request analysis | `POST /api/analyze {username, game_uuid} → {job_id}` | Creates a `queued` job; reuses an existing report/job if already done |
+| **C2** | Request analysis | `POST /api/analyze {username, game_key} → {job_id}` | ✅ Done — `server/api.py`, `tests/test_api_analyze.py`; reuses a stored report or active job, 202/200. Contract in `docs/api.md` |
 | **C3** | Poll job | `GET /api/jobs/{id}` | Returns status + progress + **partial results** |
 | **C4** | Cancel job | `POST /api/jobs/{id}/cancel` | Cooperative cancel flips a running job to `cancelled` within one ply |
-| **C5** | Fetch report | `GET /api/games/{game_uuid}/report` | Returns the stored full report |
+| **C5** | Fetch report | `GET /api/games/{game_key}/report` | Returns the stored full report |
 | **C6** | Explain **stub** | `POST /api/explain` | Route exists, returns a placeholder; **no LLM code** (that's Phase 5) |
 | **C7** | Rate limiting | Per-IP limit (e.g. **5 analyses/hour**); trust `X-Forwarded-For` **only** from Caddy | 6th request in the window → `429`; spoofed XFF from a non-proxy is ignored |
 | **C8** | Ownership / abuse model | No auth: **unguessable UUIDs** + rate limit; **never put secrets in IDs** | Written down (README/plan); IDs are UUID4; documented that anyone with an ID can fetch it |
@@ -117,8 +117,9 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
 3. ~~**B4** — the stale-job reaper~~ ✅ done; see `docs/queue.md`/`docs/worker.md`.
    ~~**B5** — the hard timeout~~ ✅ done. B4 covers worker *process death*,
    which a job timeout cannot.
-4. ~~**C1** — the game list~~ ✅ done; see `docs/api.md`. **C2** (request
-   analysis) is next.
+4. ~~**C1** — the game list~~ ✅ done; see `docs/api.md`.
+   ~~**C2** — request analysis~~ ✅ done, including the active-job dedupe
+   (migration 3). **C3** (poll) is next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

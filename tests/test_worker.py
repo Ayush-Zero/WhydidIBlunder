@@ -420,7 +420,7 @@ def test_run_drains_the_queue_and_stops(conn, cache_off, tmp_path, monkeypatch):
     seed = db.connect(path)
     db.init_db(seed)
     for i in range(3):
-        _enqueue(seed, f"job-{i}")
+        _enqueue(seed, f"job-{i}", game_key=f"chesscom:{i}")
     seed.close()
 
     monkeypatch.setenv("CACHE_DIR", "")  # off
@@ -440,7 +440,7 @@ def test_run_stops_early_when_stop_after_is_reached(conn, cache_off, tmp_path):
     seed = db.connect(path)
     db.init_db(seed)
     for i in range(5):
-        _enqueue(seed, f"job-{i}")
+        _enqueue(seed, f"job-{i}", game_key=f"chesscom:{i}")
     seed.close()
 
     worker = Worker(db_path=path, engine_factory=FakeEngine, sleep_seconds=0.0)

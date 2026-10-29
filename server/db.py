@@ -38,6 +38,7 @@ __all__ = [
     "connect",
     "default_db_path",
     "enable_wal",
+    "find_active_job",
     "get_job",
     "get_report",
     "init_db",
@@ -186,6 +187,19 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         -- analysis may legitimately run past the timeout, but a job that has
         -- stopped recording progress has not.
         ALTER TABLE jobs ADD COLUMN heartbeat_at TEXT;
+        """,
+    ),
+    (
+        3,
+        """
+        -- C2: at most one *active* job per (game, colour). The API checks before
+        -- inserting, but a double-click is two requests racing between that check
+        -- and the insert. A partial unique index makes the loser fail loudly
+        -- instead of queueing the same analysis twice; the API then returns the
+        -- winner. Finished jobs are outside the index, so a retry can queue.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_active_game
+            ON jobs(game_key, user_color)
+            WHERE status IN ('queued', 'running');
         """,
     ),
 )
@@ -362,6 +376,28 @@ def insert_job(
 def get_job(conn: sqlite3.Connection, job_id: str) -> sqlite3.Row | None:
     """Fetch one job row, or ``None`` if it does not exist."""
     return conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+
+
+def find_active_job(
+    conn: sqlite3.Connection, game_key: str, user_color: str
+) -> sqlite3.Row | None:
+    """The queued/running job for this game + colour, if there already is one.
+
+    This is C2's dedupe: a second request for a game already in the queue must
+    return the existing job rather than spend Stockfish time twice. The partial
+    unique index from migration 3 makes the same guarantee under a race, where
+    this lookup can legitimately see nothing and then lose the insert.
+    """
+    return conn.execute(
+        """
+        SELECT * FROM jobs
+         WHERE game_key = ? AND user_color = ?
+           AND status IN ('queued', 'running')
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1
+        """,
+        (game_key, user_color),
+    ).fetchone()
 
 
 # --------------------------------------------------------------------------- #

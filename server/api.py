@@ -1,9 +1,13 @@
-"""Phase 2 C1: the read-only game list.
+"""Phase 2 C1–C2: the game list and the analysis request.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
 directly: the response shape, the bot/from-position policy, and the caching all
 live on the server where they can be tested.
+
+``POST /api/analyze`` turns one of those games into a queued job. It owns the
+dedupe rules — a stored report wins over a queued job, an active job wins over a
+new one — because those are API policy, not queue mechanics.
 
 Three decisions worth stating:
 
@@ -25,11 +29,15 @@ network.
 
 from __future__ import annotations
 
+import json
+import sqlite3
+import uuid
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
 
+from server import db
 from server.chesscom import (
     ChessComClient,
     ChessComError,
@@ -39,7 +47,14 @@ from server.chesscom import (
     is_from_position,
 )
 
-__all__ = ["api_router", "GameList", "GameSummary", "PlayerSummary"]
+__all__ = [
+    "api_router",
+    "AnalyzeRequest",
+    "AnalyzeResponse",
+    "GameList",
+    "GameSummary",
+    "PlayerSummary",
+]
 
 #: Chess.com usernames are letters, digits, ``_`` and ``-``. Constraining the
 #: path parameter keeps a crafted name from becoming a different upstream URL.
@@ -228,3 +243,196 @@ def player_games(
         count=len(games),
         games=[_summary(game, username) for game in games],
     )
+
+
+# --- C2: request an analysis ---------------------------------------------
+
+
+class AnalyzeRequest(BaseModel):
+    """The body of ``POST /api/analyze``.
+
+    ``extra="forbid"`` on purpose: a typo like ``game_uuid`` should be a 422,
+    not a silently ignored field that queues the wrong thing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(
+        ...,
+        pattern=USERNAME_PATTERN,
+        description="Chess.com username (case-insensitive).",
+    )
+    game_key: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description="Opaque key from the game list; not parsed.",
+    )
+    months: int = Field(
+        3,
+        ge=1,
+        le=120,
+        description="How many archives to search for the game; must cover the list's range.",
+    )
+
+
+class AnalyzeResponse(BaseModel):
+    """What the caller polls with, and whether this call did any new work."""
+
+    #: ``None`` only in the defensive case where a stored report outlived its
+    #: job row (``game_reports.job_id`` is ``ON DELETE SET NULL``). The report
+    #: is still fetchable by ``(game_key, user_color)`` in C5.
+    job_id: str | None
+    status: Literal["queued", "running", "done"]
+    reused: bool
+    game_key: str
+    user_color: Literal["white", "black"]
+
+
+def _game_meta(game: dict) -> str:
+    """The denormalised game summary stored on the job for the UI."""
+    return json.dumps(
+        {
+            "url": game.get("url") or game.get("link"),
+            "white": (game.get("white") or {}).get("username"),
+            "black": (game.get("black") or {}).get("username"),
+            "result": _result(game),
+            "time_class": game.get("time_class"),
+            "time_control": game.get("time_control"),
+            "rated": bool(game.get("rated")),
+            "rules": game.get("rules"),
+            "end_time": game.get("end_time"),
+        },
+        separators=(",", ":"),
+    )
+
+
+def _reused(
+    job_id: str | None,
+    status: str,
+    payload: AnalyzeRequest,
+    color: str,
+) -> AnalyzeResponse:
+    return AnalyzeResponse(
+        job_id=job_id,
+        status=status,
+        reused=True,
+        game_key=payload.game_key,
+        user_color=color,
+    )
+
+
+@api_router.post(
+    "/analyze",
+    response_model=AnalyzeResponse,
+    status_code=202,
+    summary="Queue an analysis for one game",
+)
+def request_analysis(
+    payload: AnalyzeRequest,
+    request: Request,
+    response: Response,
+) -> AnalyzeResponse:
+    """Queue an analysis, or return the job/report that already covers it.
+
+    The precedence is deliberate:
+
+    1. **A stored report wins.** Re-analysing a game we already have an answer
+       for spends Stockfish time to produce the same JSON.
+    2. **An active job wins.** A double-click must not queue the same game twice;
+       the partial unique index (migration 3) makes that true under a race too.
+    3. **Otherwise a new queued job.**
+
+    Depth and MultiPV come from server config, not the request: letting a caller
+    choose ``depth=40`` would be a trivial denial-of-service.
+    """
+    try:
+        game = _client(request).find_game(
+            payload.username, payload.game_key, months=payload.months
+        )
+    except PlayerNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=f"no chess.com player named {payload.username!r}"
+        ) from exc
+    except ChessComError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"chess.com request failed: {exc}"
+        ) from exc
+
+    if game is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"game {payload.game_key!r} was not found in the last "
+                f"{payload.months} month(s) for {payload.username!r}"
+            ),
+        )
+    if not game.get("pgn"):
+        raise HTTPException(
+            status_code=422, detail="this game has no PGN to analyse"
+        )
+    if is_from_position(game):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "games that start from a custom position cannot be analysed: "
+                "they have no ply 1, which corrupts the phase labels"
+            ),
+        )
+
+    color = _user_color(game, payload.username)
+    if color is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{payload.username!r} did not play this game",
+        )
+
+    connection = db.connect(request.app.state.db_path)
+    try:
+        # Idempotent, and makes the API safe to start before a worker has ever
+        # touched the file. Relative to an analysis it costs nothing.
+        db.init_db(connection)
+
+        stored = db.get_report(connection, payload.game_key, color)
+        if stored is not None:
+            response.status_code = 200
+            return _reused(stored["job_id"], "done", payload, color)
+
+        active = db.find_active_job(connection, payload.game_key, color)
+        if active is not None:
+            response.status_code = 200
+            return _reused(active["id"], active["status"], payload, color)
+
+        from analyzer import config as analyzer_config
+
+        job_id = str(uuid.uuid4())
+        try:
+            db.insert_job(
+                connection,
+                job_id=job_id,
+                game_key=payload.game_key,
+                username=payload.username,
+                user_color=color,
+                pgn=game["pgn"],
+                depth=analyzer_config.analysis_depth(),
+                multipv=analyzer_config.analysis_multipv(),
+                game_meta=_game_meta(game),
+            )
+        except sqlite3.IntegrityError:
+            # We lost the race to another request between the lookup and the
+            # insert. The winner is the job the caller wanted anyway.
+            active = db.find_active_job(connection, payload.game_key, color)
+            if active is None:  # pragma: no cover - the index guarantees one
+                raise
+            response.status_code = 200
+            return _reused(active["id"], active["status"], payload, color)
+
+        return AnalyzeResponse(
+            job_id=job_id,
+            status="queued",
+            reused=False,
+            game_key=payload.game_key,
+            user_color=color,
+        )
+    finally:
+        connection.close()

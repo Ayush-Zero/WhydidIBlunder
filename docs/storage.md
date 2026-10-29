@@ -44,6 +44,13 @@ deliberately **not** derived from `started_at`: a large analysis may legitimatel
 run past the timeout, so *how long it has been running* cannot distinguish a slow
 job from a dead worker. *When progress was last recorded* can.
 
+Migration 3 adds a **partial unique index** on `(game_key, user_color)` for
+`status IN ('queued', 'running')`. C2 checks for an active job before inserting,
+but a double-click is two requests racing between that check and the insert; the
+index is what makes the loser fail and return the winner's job instead of
+queueing the same analysis twice. Finished jobs are outside the index, so a
+failed/cancelled/done job does not block a retry.
+
 ### `position_eval` — the cache key
 
 ```
@@ -110,8 +117,7 @@ opaque key.
 
 ## Deliberately not here yet
 
-- **The reaper and the hard timeout** — **B4 / B5**. `server/queue.py` owns the
-  claim and the transitions; it does not yet sweep for stale jobs. The worker
-  (`server/worker.py`) writes `moves`, `game_reports` and per-ply progress; the
-  durable cache lives in `server/position_cache.py`.
-- **Anything FastAPI beyond the skeleton** — **A2 / C\***.
+- **Queue-facing endpoints beyond C1/C2** — **C3–C7**. The worker, reaper and
+  durable cache are built (`server/worker.py`, `server/queue.py`,
+  `server/position_cache.py`); the API surface for polling, cancel and report is
+  not.

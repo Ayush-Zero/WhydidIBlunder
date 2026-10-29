@@ -363,3 +363,34 @@ class ChessComClient:
             if index < len(archives) - 1 and self._pause:
                 self._sleep(self._pause)
         return collected
+
+    def find_game(
+        self,
+        username: str,
+        key: str,
+        *,
+        months: int | None = None,
+    ) -> dict | None:
+        """Find one game by its :func:`game_key`, newest month first.
+
+        Chess.com has no public "game by uuid" endpoint, so this walks the same
+        archives the list endpoint uses — through the same disk cache. ``months``
+        bounds the walk; the caller must cover the range it listed, or a game it
+        showed will not be found here.
+
+        Returns the raw game dict, or ``None``. It deliberately does **not**
+        apply the list's bot/from-position filters: the caller needs to
+        distinguish "no such game" from "this game cannot be analysed", and only
+        the raw game carries that answer.
+        """
+        archives = list(reversed(self.list_archives(username)))
+        if months is not None:
+            archives = archives[:months]
+
+        for index, url in enumerate(archives):
+            for game in reversed(self.month_games(url)):
+                if game_key(game) == key:
+                    return game
+            if index < len(archives) - 1 and self._pause:
+                self._sleep(self._pause)
+        return None

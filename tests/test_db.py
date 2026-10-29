@@ -14,6 +14,8 @@ here is the *shape*, not the behaviour of parts that haven't been built:
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from server import db
@@ -126,7 +128,7 @@ def test_migrations_apply_to_an_existing_database(tmp_path):
         # Migrations are recorded, and the pre-existing row survived intact.
         assert [r[0] for r in conn.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
-        )] == [1, db.SCHEMA_VERSION]
+        )] == [1, *range(2, db.SCHEMA_VERSION + 1)]
         assert db.get_job(conn, "old")["status"] == "queued"
     finally:
         conn.close()
@@ -152,6 +154,33 @@ def test_two_connections_can_both_initialise(tmp_path):
     finally:
         a.close()
         b.close()
+
+
+def test_only_one_active_job_per_game_and_colour(conn):
+    """C2's dedupe is a schema invariant, not just an API check.
+
+    A double-click can race between the API's lookup and its insert; the partial
+    unique index is what makes the loser fail instead of queueing the same work
+    twice. Finished jobs are outside the index, so a retry is allowed.
+    """
+    _job(conn, "first", "chesscom:g", "white")
+    with pytest.raises(sqlite3.IntegrityError):
+        _job(conn, "second", "chesscom:g", "white")
+
+    # The other colour is a different report, so it is allowed.
+    _job(conn, "other-colour", "chesscom:g", "black")
+
+    # Once the first is finished, the same game can be queued again.
+    conn.execute("UPDATE jobs SET status = 'done' WHERE id = 'first'")
+    _job(conn, "retry", "chesscom:g", "white")
+
+
+def test_find_active_job_ignores_finished_jobs(conn):
+    _job(conn, "queued", "chesscom:g", "white")
+    assert db.find_active_job(conn, "chesscom:g", "white")["id"] == "queued"
+
+    conn.execute("UPDATE jobs SET status = 'failed' WHERE id = 'queued'")
+    assert db.find_active_job(conn, "chesscom:g", "white") is None
 
 
 # --- table shape ----------------------------------------------------------

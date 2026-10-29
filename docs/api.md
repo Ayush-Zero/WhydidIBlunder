@@ -4,8 +4,9 @@ The API is versioned by its URL prefix (`/api`) and documented live at
 `/api/docs` (OpenAPI at `/api/openapi.json`). This file records the decisions
 behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
-> **Status:** C1 (game list) is implemented. The queue-facing endpoints (C2–C5)
-> and the explain stub (C6) are not yet mounted.
+> **Status:** C1 (game list) and C2 (request analysis) are implemented. Polling,
+> cancel and report (C3–C5), the explain stub (C6) and rate limiting (C7) are
+> not yet mounted.
 
 ---
 
@@ -108,11 +109,73 @@ never touch the network or wait.
 
 ---
 
+## C2 — `POST /api/analyze`
+
+Turns one game from C1's list into one queued job. The body is deliberately
+small: **the server refetches the PGN from Chess.com** rather than accepting one
+from the caller, so a request cannot submit arbitrary content for analysis.
+
+### Body
+
+| Field | Default | Rules | Why |
+|---|---|---|---|
+| `username` | required | `[A-Za-z0-9_-]{1,50}` | Whose perspective to analyse. |
+| `game_key` | required | 1–256 chars, opaque | From C1; never parsed. |
+| `months` | `3` | 1–120 | How far back to search; must cover the range the list used. |
+
+`extra="forbid"`: a typo such as `game_uuid` is a `422`, not a silently ignored
+field.
+
+### Response — `202` (new job) or `200` (reused)
+
+```json
+{
+  "job_id": "6f1c0a52-...",
+  "status": "queued",
+  "reused": false,
+  "game_key": "chesscom:7515eb15-...",
+  "user_color": "white"
+}
+```
+
+`status` is `queued`, `running` or `done`. `job_id` is `null` only in the
+defensive case where a stored report outlived its job row
+(`game_reports.job_id` is `ON DELETE SET NULL`); the report is still fetchable
+by `(game_key, user_color)` in C5.
+
+### Precedence
+
+1. **A stored report wins** → `200`, `status: "done"`, `reused: true`.
+2. **An active job wins** → `200`, the job's `queued`/`running` status,
+   `reused: true`.
+3. **Otherwise a new job** → `202`, `status: "queued"`, `reused: false`.
+
+The race between the lookup and the insert is closed by the partial unique index
+from migration 3: at most one `queued`/`running` job per `(game_key,
+user_color)`. The loser of that race returns the winner's job.
+
+Depth and MultiPV come from server config (`ANALYSIS_DEPTH`,
+`ANALYSIS_MULTIPV`), never from the request — `depth=40` from a caller would be
+a trivial denial-of-service.
+
+### Refusals
+
+| Status | When |
+|---|---|
+| `404` | Unknown player, or the game is not in the searched months. |
+| `422` | No PGN, a from-position game, a username that did not play the game, or an invalid body. |
+| `502` | Chess.com failed or rate-limited us. |
+
+**From-position games are refused even though C1 can list them.** They have no
+ply 1, so the ply-based phase heuristic would be silently wrong; listing them is
+harmless, analysing them is not.
+
+---
+
 ## Not here yet
 
 | ID | Endpoint | Milestone |
 |---|---|---|
-| C2 | `POST /api/analyze` | next |
 | C3 | `GET /api/jobs/{id}` | next |
 | C4 | `POST /api/jobs/{id}/cancel` | C |
 | C5 | `GET /api/games/{game_key}/report` | C |

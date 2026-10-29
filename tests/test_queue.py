@@ -87,8 +87,8 @@ def test_a_claimed_job_is_not_claimed_again(conn):
 
 
 def test_the_oldest_job_is_claimed_first(conn):
-    _enqueue(conn, "job-old")
-    _enqueue(conn, "job-new")
+    _enqueue(conn, "job-old", game_key="chesscom:old")
+    _enqueue(conn, "job-new", game_key="chesscom:new")
     # insert_job stamps created_at at second resolution, so set them explicitly.
     conn.execute("UPDATE jobs SET created_at = '2026-01-01T00:00:00+00:00' WHERE id = 'job-old'")
     conn.execute("UPDATE jobs SET created_at = '2026-01-02T00:00:00+00:00' WHERE id = 'job-new'")
@@ -99,8 +99,8 @@ def test_the_oldest_job_is_claimed_first(conn):
 def test_the_id_breaks_a_created_at_tie(conn):
     """Deterministic ordering: without the id tiebreak two workers can select the
     same row and the loser finds nothing to update."""
-    _enqueue(conn, "job-b")
-    _enqueue(conn, "job-a")
+    _enqueue(conn, "job-b", game_key="chesscom:b")
+    _enqueue(conn, "job-a", game_key="chesscom:a")
     conn.execute("UPDATE jobs SET created_at = '2026-01-01T00:00:00+00:00'")
     assert jobq.claim_job(conn, "w").job["id"] == "job-a"
 
@@ -233,7 +233,7 @@ def test_two_workers_never_claim_the_same_job(db_path):
     db.init_db(setup)
     total = 40
     for i in range(total):
-        _enqueue(setup, f"job-{i:03d}")
+        _enqueue(setup, f"job-{i:03d}", game_key=f"chesscom:{i:03d}")
     setup.close()
 
     workers = 8

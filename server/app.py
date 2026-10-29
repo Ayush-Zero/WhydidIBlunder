@@ -104,6 +104,9 @@ def create_app(
     )
     # The routes read the client from here; there is exactly one per process.
     app.state.chesscom = client
+    # ``None`` means "read it from config" on every connection, so C2 and
+    # /health cannot disagree about which database they mean.
+    app.state.db_path = db_path
 
     app.add_middleware(
         CORSMiddleware,

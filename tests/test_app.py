@@ -94,10 +94,9 @@ def test_docs_are_served_under_api_not_root(client):
     assert client.get("/docs").status_code == 404
 
 
-def test_queue_endpoints_do_not_exist_until_their_milestone(client):
-    """C1 (the game list) exists; the queue-facing endpoints are still C2+."""
+def test_queue_facing_endpoints_do_not_exist_until_their_milestone(client):
+    """C1 (list) and C2 (request) exist; polling, cancel and report are C3+."""
     for method, path in (
-        ("post", "/api/analyze"),
         ("get", "/api/jobs/abc"),
         ("post", "/api/jobs/abc/cancel"),
         ("get", "/api/games/abc/report"),
