@@ -42,6 +42,7 @@ from analyzer.report import build_report, move_to_dict
 from server import db
 from server.position_cache import SqlitePositionCache
 from server.queue import claim_job, complete_job, fail_job, reap_stale_jobs, record_progress
+from analyzer.engine import EngineTimeoutError
 
 __all__ = ["Worker", "JobCancelled", "default_cache_for", "should_cancel"]
 
@@ -175,14 +176,65 @@ class Worker:
             boards.append(board.copy())
         total = len(boards) - 1
 
+        from analyzer import config
+
+        per_move_timeout = float(config.job_timeout_seconds())
         engine = self._open_engine()
         try:
             engine_name = getattr(engine, "name", "unknown")
             reports: list[MoveReport] = []
 
             for index, _, report in iter_game_moves(
-                game, engine=engine, depth=depth, multipv=multipv, cache=cache
+                game, engine=engine, depth=depth, multipv=multipv, cache=cache, per_move_timeout=per_move_timeout
             ):
+                # Cooperative cancel, checked *before* the ply is recorded: a
+                # cancelled job must not gain a row for work it is abandoning.
+                if should_cancel(conn, job_id):
+                    raise JobCancelled(job_id)
+
+                wire = move_to_dict(report)
+                db.upsert_move(
+                    conn,
+                    job_id=job_id,
+                    move=wire,
+                    fen_before=boards[index].fen(),
+                    fen_after=boards[index + 1].fen(),
+                )
+                reports.append(report)
+
+                if (index + 1) % self.heartbeat_every == 0:
+                    # Progress and liveness in one write: "ply N is done" and
+                    # "this worker is alive" are the same fact (see server.queue).
+                    record_progress(conn, job_id, index + 1)
+            # A late cancel still wins: otherwise a job could be marked done
+            # moments after the user asked it to stop.
+            if should_cancel(conn, job_id):
+                raise JobCancelled(job_id)
+
+            report_dict = build_report(game, reports, color, engine_name, depth, multipv)
+
+            # Report first, status second. A ``done`` job with no report would be
+            # unrecoverable; a ``running`` job with a report is simply re-run by
+            # the reaper (B4) and overwrites it. So this ordering is the only one
+            # whose failure mode is recoverable.
+            db.save_report(
+                conn,
+                game_key=job["game_key"],
+                user_color=color,
+                job_id=job_id,
+                report=report_dict,
+            )
+            complete_job(conn, job_id)
+            return {
+                "job_id": job_id,
+                "plies": total,
+                "status": "done",
+                "accuracy": report_dict["summary"]["accuracy"],
+            }
+        finally:
+            close = getattr(engine, "close", None)
+            if callable(close):
+                close()
                 # Cooperative cancel, checked *before* the ply is recorded: a
                 # cancelled job must not gain a row for work it is abandoning.
                 if should_cancel(conn, job_id):
@@ -263,6 +315,12 @@ class Worker:
             )
             log.info("job cancelled", extra={"job_id": job_id})
             return {"job_id": job_id, "status": "cancelled"}
+        except EngineTimeoutError as exc:
+            # B5: hard timeout kills stuck Stockfish for the current job.
+            # The engine may be dead; we mark failed and let the worker survive.
+            fail_job(conn, job_id, f"EngineTimeoutError: {exc}")
+            log.exception("job timed out", extra={"job_id": job_id})
+            return {"job_id": job_id, "status": "failed"}
         except Exception as exc:  # noqa: BLE001 - any failure must leave the job settled
             fail_job(conn, job_id, f"{type(exc).__name__}: {exc}")
             log.exception("job failed", extra={"job_id": job_id})

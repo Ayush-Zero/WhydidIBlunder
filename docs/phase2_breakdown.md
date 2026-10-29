@@ -38,7 +38,7 @@
 | **B2** | Atomic job claim | `BEGIN IMMEDIATE` + `PRAGMA busy_timeout`; `UPDATE … RETURNING id` sets `running`, `worker_id`, `started_at` | ✅ Done — `server/queue.py`, `docs/queue.md`, `tests/test_queue.py` (migration 2 adds `heartbeat_at`) |
 | **B3** | Worker loop | Claim queued job → run `analyze_game`, persisting per-ply `moves` + progress; **check cancel between plies**; finalise `game_report` + job status | ✅ Done — `server/worker.py`, `server/position_cache.py`, `server/worker_main.py`, `docs/worker.md`, `tests/test_worker.py` (verified live: 45 plies, accuracy 87.9) |
 | **B4** | **Stale-job reaper** | Periodic sweep returns `running` jobs older than the hard timeout to `queued`/`failed` | ✅ Done — `server/queue.py` (`reap_stale_jobs`), integrated into `server/worker.py`, `tests/test_queue.py` (keys off `heartbeat_at`) |
-| **B5** | Hard job timeout | Kill stuck Stockfish for the current job | A deliberately-hung analysis is killed; job marked failed/requeued, worker survives |
+| **B5** | Hard job timeout | Kill stuck Stockfish for the current job | ✅ Done — per-move timeout in `analyzer/engine.py`, propagated by worker (`server/worker.py`), job marked `failed`, worker survives |
 
 > B4 exists because a job timeout does **not** cover worker **process death**.
 > Both are required, not one or the other.
@@ -115,8 +115,8 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    (`server/position_cache.py`) landed with it, since the worker has the
    connection.
 3. ~~**B4** — the stale-job reaper~~ ✅ done; see `docs/queue.md`/`docs/worker.md`.
-   **B5** — the hard timeout (kill a live but hung Stockfish mid-analysis). B4
-   covers worker *process death*, which a job timeout cannot.
+   ~~**B5** — the hard timeout~~ ✅ done. B4 covers worker *process death*,
+   which a job timeout cannot.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

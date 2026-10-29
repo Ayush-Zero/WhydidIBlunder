@@ -108,10 +108,17 @@ not `started_at`, so a long-but-healthy analysis is not mistaken for a dead
 worker. A stale job is requeued (up to `MAX_ATTEMPTS`), otherwise marked
 `failed`. This covers **worker process death**, which no in-process timeout can.
 
+## Hard timeout (B5)
+
+The worker passes `JOB_TIMEOUT_SECONDS` as a **per-move** timeout to
+`analyzer.engine.Engine.analyse()`. If a single position search exceeds the
+timeout, the engine process is terminated and `EngineTimeoutError` is raised;
+the job is marked `failed` and the worker **survives** (its loop continues).
+B4 covers a dead worker process entirely; B5 kills a live-but-hung Stockfish
+for the current job.
+
 ## Not here
 
-- **B5 (hard timeout)** — nothing kills a live but hung Stockfish mid-analysis
-  yet.
 - **Retries** — `run_once` fails a job on exception; it does not requeue for
   another attempt. That policy belongs with the reaper, where the attempt count
   is already tracked.

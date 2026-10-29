@@ -69,6 +69,7 @@ def _analyse_cached(
     depth: int,
     multipv: int,
     cache: PositionCache | None,
+    timeout: float | None = None,
 ) -> list:
     """``engine.analyse`` with the B1 cache in front of it.
 
@@ -78,7 +79,10 @@ def _analyse_cached(
     by :mod:`analyzer.report`.
     """
     if cache is None:
-        return engine.analyse(board, depth=depth, multipv=multipv)
+        try:
+            return engine.analyse(board, depth=depth, multipv=multipv, timeout=timeout)
+        except TypeError:
+            return engine.analyse(board, depth=depth, multipv=multipv)
 
     version = PositionCache.engine_version(engine)
     hit = cache.lookup(
@@ -91,7 +95,10 @@ def _analyse_cached(
     if hit is not None:
         return hit[1]
 
-    lines = engine.analyse(board, depth=depth, multipv=multipv)
+    try:
+        lines = engine.analyse(board, depth=depth, multipv=multipv, timeout=timeout)
+    except TypeError:
+        lines = engine.analyse(board, depth=depth, multipv=multipv)
     cache.store(
         fen=board.fen(),
         engine_version=version,
@@ -110,6 +117,7 @@ def analyse_game_moves(
     depth: int | None = None,
     multipv: int | None = None,
     cache: PositionCache | None = None,
+    per_move_timeout: float | None = None,
 ) -> list[MoveReport]:
     """Analyse every move of ``game``.
 
@@ -127,7 +135,7 @@ def analyse_game_moves(
     return [
         report
         for _, _, report in iter_game_moves(
-            game, engine=engine, depth=depth, multipv=multipv, cache=cache
+            game, engine=engine, depth=depth, multipv=multipv, cache=cache, per_move_timeout=per_move_timeout
         )
     ]
 
@@ -139,6 +147,7 @@ def iter_game_moves(
     depth: int | None = None,
     multipv: int | None = None,
     cache: PositionCache | None = None,
+    per_move_timeout: float | None = None,
 ):
     """Yield ``(index, total_plies, MoveReport)`` one ply at a time.
 
@@ -183,7 +192,7 @@ def iter_game_moves(
         position = boards[index]
         if position.is_game_over():
             return None
-        return _analyse_cached(engine, position, depth, multipv, cache)
+        return _analyse_cached(engine, position, depth, multipv, cache, timeout=per_move_timeout)
 
     before_lines = analysed(0)
     for i, mv in enumerate(moves):
@@ -300,8 +309,9 @@ def analyse_moves(
     depth: int | None = None,
     multipv: int | None = None,
     cache: PositionCache | None = None,
+    per_move_timeout: float | None = None,
 ) -> list[MoveReport]:
     """Convenience: parse the first game in ``pgn_text`` and analyse its moves."""
     return analyse_game_moves(
-        read_game(pgn_text), engine=engine, depth=depth, multipv=multipv, cache=cache
+        read_game(pgn_text), engine=engine, depth=depth, multipv=multipv, cache=cache, per_move_timeout=per_move_timeout
     )
