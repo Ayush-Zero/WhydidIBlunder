@@ -1,4 +1,4 @@
-"""Phase 2 C1–C5: the game list, analysis, polling, cancel, and the report.
+"""Phase 2 C1–C6: the game list, analysis, polling, cancel, report, and explain.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
@@ -19,6 +19,9 @@ process directly; the database is the only channel.
 
 ``GET /api/games/{game_key}/report`` serves the frozen Phase 1 report that the
 worker stored. It is a pure read: no engine, no Chess.com fetch, no reshaping.
+
+``POST /api/explain`` is a Phase 2 stub. It accepts the Phase 5 LLM input shape
+and returns a placeholder; no provider keys, prompts or LLM calls live here yet.
 
 Three decisions worth stating:
 
@@ -706,3 +709,81 @@ def get_game_report(
             detail=f"no report for game {game_key!r} as {user_color}",
         )
     return Response(content=body, media_type="application/json")
+
+
+# --- C6: explain one move (stub) -----------------------------------------
+
+
+class ExplainRequest(BaseModel):
+    """The engine facts an explanation is grounded in.
+
+    This is deliberately the Phase 5 LLM input shape (``fen``, ``played``,
+    ``best``, ``pv``, ``tags``), so the frontend can wire the call now and the
+    backend can be filled in without changing the request. No PGN and no
+    user-controlled prose: the LLM must explain engine facts, not invent them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    fen: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description="Position before the move, as FEN.",
+    )
+    played: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        description="The move that was played, in SAN.",
+    )
+    best: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        description="The engine's top move, in SAN.",
+    )
+    pv: list[str] = Field(
+        default_factory=list,
+        max_length=16,
+        description="The engine's best line, in SAN.",
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        max_length=16,
+        description="Rule tags from the report (e.g. 'fork', 'pin').",
+    )
+
+
+class ExplainResponse(BaseModel):
+    """A placeholder until Phase 5; ``stub`` lets the UI label it honestly."""
+
+    explanation: str
+    stub: bool = True
+
+
+@api_router.post(
+    "/explain",
+    response_model=ExplainResponse,
+    summary="Explain one move (placeholder until Phase 5)",
+)
+def explain_move(payload: ExplainRequest) -> ExplainResponse:
+    """Return a fixed placeholder, not an explanation.
+
+    Phase 2 only needs the route to exist so the frontend can call it. Building
+    the LLM layer here would pull provider keys, prompts and cost controls into a
+    milestone that is explicitly about the API surface. The request shape is the
+    Phase 5 one so the frontend does not have to change later.
+
+    The stub is deliberately **not** an echo of the request: user-controlled
+    strings should not be reflected into the UI, and a fixed message cannot be
+    mistaken for a real explanation.
+    """
+    return ExplainResponse(
+        explanation=(
+            "Explanations are not available yet. This is a placeholder so the "
+            "frontend can wire the call; the engine's evaluation and best line "
+            "are already in the game report."
+        ),
+        stub=True,
+    )

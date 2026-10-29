@@ -94,11 +94,6 @@ def test_docs_are_served_under_api_not_root(client):
     assert client.get("/docs").status_code == 404
 
 
-def test_explain_does_not_exist_until_its_milestone(client):
-    """C1–C5 exist; the explain stub (C6) is still unmounted."""
-    assert client.post("/api/explain", json={}).status_code == 404
-
-
 def test_redoc_is_disabled(client):
     """One documentation UI is enough; a second is surface area."""
     assert client.get("/redoc").status_code == 404

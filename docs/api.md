@@ -4,9 +4,9 @@ The API is versioned by its URL prefix (`/api`) and documented live at
 `/api/docs` (OpenAPI at `/api/openapi.json`). This file records the decisions
 behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
-> **Status:** C1 (game list), C2 (request analysis), C3 (poll), C4 (cancel) and
-> C5 (report) are implemented. The explain stub (C6) and rate limiting (C7) are
-> not yet mounted.
+> **Status:** C1 (game list), C2 (request analysis), C3 (poll), C4 (cancel),
+> C5 (report) and C6 (explain stub) are implemented. Rate limiting (C7) is not
+> yet mounted.
 
 ---
 
@@ -349,12 +349,54 @@ Neither is a secret.
 
 ---
 
+## C6 — `POST /api/explain` (stub)
+
+Returns a fixed placeholder. The route exists so the frontend can wire the call
+now; the LLM layer is Phase 5. There are no provider keys, prompts or network
+calls here.
+
+### Request
+
+```json
+{
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "played": "e4",
+  "best": "d4",
+  "pv": ["d4", "d5", "c4"],
+  "tags": ["hanging_piece"]
+}
+```
+
+- `fen`, `played` and `best` are required; `pv` and `tags` are optional (at most
+  16 entries each).
+- `extra="forbid"`: a typo like `pgn` is a `422`, not a silently ignored fact.
+- This is the Phase 5 LLM input shape (`{fen, played, best, pv, tags}`), so the
+  frontend does not have to change when the real explanation lands.
+
+### Response — `200`
+
+```json
+{
+  "explanation": "Explanations are not available yet. This is a placeholder ...",
+  "stub": true
+}
+```
+
+- **`stub: true`** lets the UI label the text honestly; it is not an explanation.
+- **The text is fixed.** The stub does not echo user-controlled strings, so a
+  crafted SAN or tag cannot be reflected into the page.
+- **No database, no Chess.com, no engine.** The stub works before a worker has
+  migrated the database, and it does not read the report.
+- **Errors:** `422` for an invalid body, `405` for `GET`. There is no `404`/`503`
+  path here.
+
+---
+
 ## Not here yet
 
 | ID | Endpoint | Milestone |
 |---|---|---|
-| C6 | `POST /api/explain` (stub) | next |
-| C7 | per-IP rate limiting | C |
+| C7 | per-IP rate limiting | next |
 
 The breakdown writes `game_uuid` for C2/C5; the identifier is **`game_key`**
 for the reason above — not every game has a `uuid`, and the database is keyed on

@@ -117,7 +117,7 @@ opaque key.
 
 ## Deliberately not here yet
 
-- **The explain stub and rate limiting** — **C6–C7**. The worker, reaper and
-  durable cache are built (`server/worker.py`, `server/queue.py`,
-  `server/position_cache.py`); polling (C3), cancel (C4) and the stored report
-  (C5) are mounted.
+- **Rate limiting** — **C7**. The worker, reaper and durable cache are built
+  (`server/worker.py`, `server/queue.py`, `server/position_cache.py`); polling
+  (C3), cancel (C4), the stored report (C5) and the explain stub (C6) are
+  mounted. C6 deliberately does not touch this database.
