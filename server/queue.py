@@ -176,13 +176,19 @@ def record_progress(conn: sqlite3.Connection, job_id: str, plies_done: int) -> N
 # terminal-ish transitions
 # --------------------------------------------------------------------------- #
 def complete_job(conn: sqlite3.Connection, job_id: str) -> None:
-    """Mark a job ``done`` and stamp ``finished_at``."""
+    """Mark a job ``done`` and stamp ``finished_at``.
+
+    Only a job that is still ``queued``/``running`` can complete. A cancel (C4)
+    can land in the tiny window between the worker's last cancellation check and
+    this statement; the cancel wins, because the user asked to stop and the job
+    must not flip back to ``done`` behind their back.
+    """
     now = utcnow()
     conn.execute(
         """
         UPDATE jobs
            SET status = 'done', finished_at = ?, updated_at = ?, error = NULL
-         WHERE id = ?
+         WHERE id = ? AND status IN ('queued', 'running')
         """,
         (now, now, job_id),
     )
@@ -194,13 +200,16 @@ def fail_job(conn: sqlite3.Connection, job_id: str, error: str) -> None:
     The reason is stored, not just logged: a failed job that does not say why is
     indistinguishable from a crashed worker, and the first thing anyone asks is
     "what went wrong". Truncated because the reason may embed a traceback.
+
+    Like :func:`complete_job`, this only touches a job that is still
+    ``queued``/``running``: a late engine failure must not overwrite a cancel.
     """
     now = utcnow()
     conn.execute(
         """
         UPDATE jobs
            SET status = 'failed', finished_at = ?, updated_at = ?, error = ?
-         WHERE id = ?
+         WHERE id = ? AND status IN ('queued', 'running')
         """,
         (now, now, str(error)[:2000], job_id),
     )
@@ -234,12 +243,15 @@ def request_cancel(conn: sqlite3.Connection, job_id: str) -> bool:
     there is no in-process channel from the API to the worker, so the database is
     the signal. A job that was already ``done``/``failed``/``cancelled`` is left
     alone and reported as "nothing to do", so a double-click is harmless.
+
+    A stale retry reason (``requeue_job`` stores one when the reaper requeues a
+    job) is cleared: the job did not fail, it was cancelled.
     """
     now = utcnow()
     cursor = conn.execute(
         """
         UPDATE jobs
-           SET status = 'cancelled', finished_at = ?, updated_at = ?
+           SET status = 'cancelled', finished_at = ?, updated_at = ?, error = NULL
          WHERE id = ? AND status IN ('queued', 'running')
         """,
         (now, now, job_id),

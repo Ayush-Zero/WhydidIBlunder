@@ -379,6 +379,68 @@ def test_fail_truncates_an_enormous_reason(conn):
     assert len(db.get_job(conn, "job-1")["error"]) == 2000
 
 
+# --- cancellation ----------------------------------------------------------
+
+
+def test_cancel_marks_a_queued_job_cancelled(conn):
+    _enqueue(conn)
+    assert jobq.request_cancel(conn, "job-1") is True
+    row = db.get_job(conn, "job-1")
+    assert row["status"] == "cancelled"
+    assert row["finished_at"]
+
+
+def test_cancel_marks_a_running_job_cancelled(conn):
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    assert jobq.request_cancel(conn, "job-1") is True
+    assert db.get_job(conn, "job-1")["status"] == "cancelled"
+
+
+def test_cancel_is_idempotent(conn):
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    assert jobq.request_cancel(conn, "job-1") is True
+    assert jobq.request_cancel(conn, "job-1") is False
+    assert db.get_job(conn, "job-1")["status"] == "cancelled"
+
+
+def test_a_cancelled_job_is_not_claimable(conn):
+    """Cancelling a queued job means no worker ever starts it."""
+    _enqueue(conn)
+    jobq.request_cancel(conn, "job-1")
+    assert jobq.claim_job(conn, "w").reason == "empty"
+
+
+def test_cancel_clears_a_stale_retry_reason(conn):
+    """A requeued job may carry the reaper's reason; a cancel is not a failure."""
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    jobq.requeue_job(conn, "job-1", error="reaped: no heartbeat")
+    jobq.request_cancel(conn, "job-1")
+    assert db.get_job(conn, "job-1")["error"] is None
+
+
+def test_a_late_complete_does_not_overwrite_a_cancel(conn):
+    """The cancel can land between the worker's last check and ``done``."""
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    jobq.request_cancel(conn, "job-1")
+    jobq.complete_job(conn, "job-1")
+    assert db.get_job(conn, "job-1")["status"] == "cancelled"
+
+
+def test_a_late_failure_does_not_overwrite_a_cancel(conn):
+    """An engine failure after the cancel must not resurrect the job as failed."""
+    _enqueue(conn)
+    jobq.claim_job(conn, "w")
+    jobq.request_cancel(conn, "job-1")
+    jobq.fail_job(conn, "job-1", "engine died")
+    row = db.get_job(conn, "job-1")
+    assert row["status"] == "cancelled"
+    assert row["error"] is None
+
+
 def test_requeue_clears_the_worker_and_restarts_the_clock(conn):
     _enqueue(conn)
     jobq.claim_job(conn, "worker-1")

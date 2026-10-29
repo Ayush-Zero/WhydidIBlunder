@@ -48,6 +48,12 @@ The check runs before each ply is recorded, and again after the loop, so:
 - a cancelled job gains no row for work it is abandoning;
 - a job cannot be marked `done` moments after the user asked it to stop.
 
+The terminal transitions (`complete_job`, `fail_job`) are themselves conditional
+on the job still being `queued`/`running`. The final check and `complete_job` are
+two separate statements, so a cancel can land between them; the conditional
+update is what makes the cancel win instead of being overwritten by a late
+`done` or `failed`.
+
 A cancel is **not a rollback**. The plies already written are true partial
 results and stay; the job becomes `cancelled`, and no report is written. There is
 deliberately **no attempt to kill Stockfish mid-search from here** — that is the

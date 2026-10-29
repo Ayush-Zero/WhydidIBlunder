@@ -4,9 +4,9 @@ The API is versioned by its URL prefix (`/api`) and documented live at
 `/api/docs` (OpenAPI at `/api/openapi.json`). This file records the decisions
 behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 
-> **Status:** C1 (game list), C2 (request analysis) and C3 (poll) are
-> implemented. Cancel and report (C4–C5), the explain stub (C6) and rate
-> limiting (C7) are not yet mounted.
+> **Status:** C1 (game list), C2 (request analysis), C3 (poll) and C4 (cancel)
+> are implemented. The report (C5), the explain stub (C6) and rate limiting
+> (C7) are not yet mounted.
 
 ---
 
@@ -232,8 +232,9 @@ Field notes:
 - **Partial results survive `failed` and `cancelled`.** They are what the worker
   actually wrote; deleting them because the job did not finish would throw away
   real analysis.
-- **`error` is set only for `failed`**, and carries the worker's reason
-  (truncated).
+- **`error` carries the worker's reason** — the failure for `failed`, or the
+  reaper's explanation while a requeued job waits. It is `None` for `done` and
+  `cancelled`.
 - **Polling never mutates the job.** It is a read-only view; a status check that
   changes state would be a second scheduler.
 
@@ -250,12 +251,64 @@ unguessable and carries no secret.
 
 ---
 
+## C4 — `POST /api/jobs/{job_id}/cancel`
+
+Asks a queued or running job to stop. The status row flips immediately; the
+worker checks it between plies, so the engine may still be finishing the ply it
+had already started. "Cancelled within one ply" is the contract.
+
+### Response — `200`
+
+```json
+{
+  "job_id": "6f1c0a52-...",
+  "status": "cancelled",
+  "cancelled": true
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `status` | The job's status **after** the request. |
+| `cancelled` | `true` only if *this call* moved a queued/running job to `cancelled`. |
+
+Field notes:
+
+- **Idempotent.** A second click, or a cancel that arrives after the job
+  finished, returns `200` with the terminal status and `cancelled: false`. There
+  is no `409`: the caller learns what actually happened, and a late request does
+  not turn into an error.
+- **A cancel is not a rollback.** Plies already written stay; C3 keeps returning
+  them. A cancel that lands before the analysis finishes writes no report; one
+  that arrives after the report was saved leaves that complete report available
+  to C5.
+- **A queued job never starts.** The status changes before any worker can claim
+  it, so the cancel is not a race against a worker that has not begun.
+- **Cancel wins a late race.** `complete_job`/`fail_job` only transition a job
+  that is still queued/running, so a worker finishing or failing a moment later
+  cannot flip a cancelled job back to `done`/`failed`.
+- **The endpoint does not kill Stockfish.** The current search is bounded by the
+  per-move timeout; cancel takes effect at the next ply boundary. Killing a live
+  engine mid-search is the hard-timeout mechanism (B5), not this one.
+
+### Errors
+
+| Status | When |
+|---|---|
+| `404` | No job with that id. |
+| `422` | The id fails path validation (empty, or longer than 64 chars). |
+| `503` | The database has not been initialised yet. |
+
+There is no auth (C8): anyone holding the UUID4 can cancel it. The id is
+unguessable and carries no secret.
+
+---
+
 ## Not here yet
 
 | ID | Endpoint | Milestone |
 |---|---|---|
-| C4 | `POST /api/jobs/{id}/cancel` | next |
-| C5 | `GET /api/games/{game_key}/report` | C |
+| C5 | `GET /api/games/{game_key}/report` | next |
 | C6 | `POST /api/explain` (stub) | C |
 | C7 | per-IP rate limiting | C |
 

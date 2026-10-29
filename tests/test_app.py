@@ -94,13 +94,9 @@ def test_docs_are_served_under_api_not_root(client):
     assert client.get("/docs").status_code == 404
 
 
-def test_cancel_and_report_do_not_exist_until_their_milestone(client):
-    """C1–C3 exist; cancel (C4) and report (C5) are still unmounted."""
-    for method, path in (
-        ("post", "/api/jobs/abc/cancel"),
-        ("get", "/api/games/abc/report"),
-    ):
-        assert getattr(client, method)(path).status_code == 404
+def test_report_does_not_exist_until_its_milestone(client):
+    """C1–C4 exist; the stored report (C5) is still unmounted."""
+    assert client.get("/api/games/abc/report").status_code == 404
 
 
 def test_redoc_is_disabled(client):

@@ -1,4 +1,4 @@
-"""Phase 2 C1–C3: the game list, the analysis request, and polling.
+"""Phase 2 C1–C4: the game list, the analysis request, polling, and cancel.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
@@ -12,6 +12,10 @@ new one — because those are API policy, not queue mechanics.
 ``GET /api/jobs/{job_id}`` is the read side of that queue. It returns the
 persisted prefix of the analysis, which is what makes a long job observable
 without pretending the unfinished part exists.
+
+``POST /api/jobs/{job_id}/cancel`` is the write side: it flips the status row,
+and the worker notices between plies. The API never talks to the engine
+process directly; the database is the only channel.
 
 Three decisions worth stating:
 
@@ -41,7 +45,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from server import db
+from server import db, queue
 from server.chesscom import (
     ChessComClient,
     ChessComError,
@@ -55,8 +59,11 @@ __all__ = [
     "api_router",
     "AnalyzeRequest",
     "AnalyzeResponse",
+    "CancelResponse",
     "GameList",
     "GameSummary",
+    "JobMove",
+    "JobStatus",
     "PlayerSummary",
 ]
 
@@ -66,6 +73,11 @@ USERNAME_PATTERN = r"^[A-Za-z0-9_-]{1,50}$"
 
 #: The time classes Chess.com publishes. Anything else is a client mistake.
 TimeClass = Literal["bullet", "blitz", "rapid", "daily"]
+
+#: The job lifecycle, mirroring ``server.db.JOB_STATUSES``. Spelled as a
+#: ``Literal`` so the generated schema names the values instead of saying
+#: "string".
+JobStatusValue = Literal["queued", "running", "done", "failed", "cancelled"]
 
 api_router = APIRouter(prefix="/api", tags=["games"])
 
@@ -477,7 +489,7 @@ class JobStatus(BaseModel):
     """A job's state plus the part of its analysis that actually exists."""
 
     job_id: str
-    status: Literal["queued", "running", "done", "failed", "cancelled"]
+    status: JobStatusValue
     game_key: str
     user_color: Literal["white", "black"]
     #: Number of plies whose results are available. At least ``len(moves)``:
@@ -485,7 +497,8 @@ class JobStatus(BaseModel):
     #: API reports the truthful prefix rather than the stale checkpoint.
     progress_ply: int
     moves: list[JobMove]
-    #: The worker's failure reason, or ``None`` for every other status.
+    #: The worker's failure or retry reason; ``None`` when there is nothing to
+    #: say. A requeued job can carry the reaper's explanation while it waits.
     error: str | None = None
 
 
@@ -564,4 +577,66 @@ def job_status(
         progress_ply=max(int(job["progress_ply"]), len(moves)),
         moves=[_job_move(row) for row in moves],
         error=job["error"],
+    )
+
+
+# --- C4: cancel a job -----------------------------------------------------
+
+
+class CancelResponse(BaseModel):
+    """The outcome of a cancel request.
+
+    ``cancelled`` means *this call* moved the job to ``cancelled``. A job that
+    was already terminal is returned with its current status and ``cancelled:
+    false``, so a double-click is harmless.
+    """
+
+    job_id: str
+    status: JobStatusValue
+    cancelled: bool
+
+
+@api_router.post(
+    "/jobs/{job_id}/cancel",
+    response_model=CancelResponse,
+    summary="Cancel a queued or running job",
+)
+def cancel_job(
+    request: Request,
+    job_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="The job_id returned by POST /api/analyze.",
+    ),
+) -> CancelResponse:
+    """Ask a job to stop, cooperatively.
+
+    The status is written immediately, even for a ``running`` job: the worker
+    polls the database between plies, so the row is the cancel channel. The
+    worker may still be finishing the ply it had already started; this endpoint
+    returns the requested state, not proof that the engine process has exited.
+
+    Only ``queued`` and ``running`` jobs can be cancelled. A terminal job is
+    returned as-is with ``cancelled: false``, which makes a double-click or a
+    late request harmless.
+    """
+    connection = db.connect(request.app.state.db_path)
+    try:
+        try:
+            changed = queue.request_cancel(connection, job_id)
+            job = db.get_job(connection, job_id)
+        except sqlite3.OperationalError as exc:
+            raise HTTPException(
+                status_code=503, detail="database is not ready"
+            ) from exc
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"job {job_id!r} not found")
+    finally:
+        connection.close()
+
+    return CancelResponse(
+        job_id=job_id,
+        status=job["status"],
+        cancelled=bool(changed and job["status"] == "cancelled"),
     )

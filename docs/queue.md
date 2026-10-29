@@ -102,9 +102,15 @@ arrival.
 |---|---|
 | `claim_job` | `queued → running`; bumps `attempts`, clears `error` |
 | `record_progress` / `touch_job` | liveness only; no status change |
-| `complete_job` | `→ done`; stamps `finished_at` |
-| `fail_job` | `→ failed`; stores a **truncated** reason (it may embed a traceback) |
+| `request_cancel` | `queued/running → cancelled`; stamps `finished_at` |
+| `complete_job` | `queued/running → done`; stamps `finished_at` |
+| `fail_job` | `queued/running → failed`; stores a **truncated** reason (it may embed a traceback) |
 | `requeue_job` | `→ queued`; clears `worker_id`/`started_at`/`heartbeat_at` |
+
+`complete_job` and `fail_job` only transition a job that is still `queued` or
+`running`. That is what makes cancellation (C4) win a late race: a worker can be
+a moment behind the API, and a cancel must not be overwritten by a `done` or
+`failed` transition that was already in flight.
 
 `requeue_job` clears the worker fields rather than keeping them: a stale
 `worker_id` on a queued job makes it look like someone still owns it.

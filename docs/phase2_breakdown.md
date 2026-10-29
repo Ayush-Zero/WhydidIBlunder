@@ -52,7 +52,7 @@
 | **C1** | Game list (proxy) | `GET /api/player/{username}/games` | ✅ Done — `server/api.py`, `tests/test_api_games.py`; normalised list, bot/from-position policy, disk-cached. Contract in `docs/api.md` |
 | **C2** | Request analysis | `POST /api/analyze {username, game_key} → {job_id}` | ✅ Done — `server/api.py`, `tests/test_api_analyze.py`; reuses a stored report or active job, 202/200. Contract in `docs/api.md` |
 | **C3** | Poll job | `GET /api/jobs/{id}` | ✅ Done — `server/api.py`, `tests/test_api_jobs.py`; status, `progress_ply`, persisted partial moves, `error`. Contract in `docs/api.md` |
-| **C4** | Cancel job | `POST /api/jobs/{id}/cancel` | Cooperative cancel flips a running job to `cancelled` within one ply |
+| **C4** | Cancel job | `POST /api/jobs/{id}/cancel` | ✅ Done — `server/api.py`, `tests/test_api_cancel.py`; queued/running → `cancelled` immediately, idempotent, partial moves kept. Contract in `docs/api.md` |
 | **C5** | Fetch report | `GET /api/games/{game_key}/report` | Returns the stored full report |
 | **C6** | Explain **stub** | `POST /api/explain` | Route exists, returns a placeholder; **no LLM code** (that's Phase 5) |
 | **C7** | Rate limiting | Per-IP limit (e.g. **5 analyses/hour**); trust `X-Forwarded-For` **only** from Caddy | 6th request in the window → `429`; spoofed XFF from a non-proxy is ignored |
@@ -119,7 +119,8 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    which a job timeout cannot.
 4. ~~**C1** — the game list~~ ✅ done; see `docs/api.md`.
    ~~**C2** — request analysis~~ ✅ done, including the active-job dedupe
-   (migration 3). ~~**C3** — poll~~ ✅ done. **C4** (cancel) is next.
+   (migration 3). ~~**C3** — poll~~ ✅ done. ~~**C4** — cancel~~ ✅ done.
+   **C5** (report) is next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 
