@@ -94,12 +94,12 @@ def test_docs_are_served_under_api_not_root(client):
     assert client.get("/docs").status_code == 404
 
 
-def test_no_analysis_endpoints_exist_yet(client):
-    """Milestone C owns these; a stray one here would mean scoping drift."""
+def test_queue_endpoints_do_not_exist_until_their_milestone(client):
+    """C1 (the game list) exists; the queue-facing endpoints are still C2+."""
     for method, path in (
-        ("get", "/api/player/someone/games"),
         ("post", "/api/analyze"),
         ("get", "/api/jobs/abc"),
+        ("post", "/api/jobs/abc/cancel"),
         ("get", "/api/games/abc/report"),
     ):
         assert getattr(client, method)(path).status_code == 404

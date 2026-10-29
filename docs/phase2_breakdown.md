@@ -49,7 +49,7 @@
 
 | ID | Part | Endpoint / concern | Done when |
 |----|------|--------------------|-----------|
-| **C1** | Game list (proxy) | `GET /api/player/{username}/games` | Returns normalised list; served from cache on repeat |
+| **C1** | Game list (proxy) | `GET /api/player/{username}/games` | ✅ Done — `server/api.py`, `tests/test_api_games.py`; normalised list, bot/from-position policy, disk-cached. Contract in `docs/api.md` |
 | **C2** | Request analysis | `POST /api/analyze {username, game_uuid} → {job_id}` | Creates a `queued` job; reuses an existing report/job if already done |
 | **C3** | Poll job | `GET /api/jobs/{id}` | Returns status + progress + **partial results** |
 | **C4** | Cancel job | `POST /api/jobs/{id}/cancel` | Cooperative cancel flips a running job to `cancelled` within one ply |
@@ -117,6 +117,8 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
 3. ~~**B4** — the stale-job reaper~~ ✅ done; see `docs/queue.md`/`docs/worker.md`.
    ~~**B5** — the hard timeout~~ ✅ done. B4 covers worker *process death*,
    which a job timeout cannot.
+4. ~~**C1** — the game list~~ ✅ done; see `docs/api.md`. **C2** (request
+   analysis) is next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

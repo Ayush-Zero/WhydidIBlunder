@@ -2,9 +2,9 @@
 
 Deliberately thin. This part exists to prove the service boots, reads its
 settings from one place, logs in a shape a log aggregator can parse, and exposes
-a health check that tells the truth about the database. **No analysis
-endpoints live here** — those are Milestone C, and they need the queue from
-Milestone B.
+a health check that tells the truth about the database. Endpoints live in
+:mod:`server.api` and are included here; the queue-facing ones (C2+) arrive with
+the rest of Milestone C.
 
 Two decisions worth stating:
 
@@ -25,12 +25,15 @@ import os
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from server import db
+from server.api import api_router
+from server.chesscom import ChessComClient, cache_dir_from_env
 from server.logging_setup import configure_logging, request_id_var
 
 __all__ = ["create_app", "cors_origins"]
@@ -56,6 +59,7 @@ def create_app(
     *,
     db_path: str | None = None,
     configure_logging_now: bool = True,
+    chesscom_client: ChessComClient | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -67,9 +71,27 @@ def create_app(
     configure_logging_now:
         Logging is configured once per *process*, not once per app, so tests that
         build several apps can skip re-configuring the root logger.
+    chesscom_client:
+        Override the Chess.com client. Tests inject one backed by recorded JSON
+        so the API tests never touch the network. ``None`` builds the production
+        client, using ``CHESSCOM_CACHE_DIR`` when it is set.
     """
     if configure_logging_now:
         configure_logging()
+
+    client = (
+        chesscom_client
+        if chesscom_client is not None
+        else ChessComClient(cache_dir=cache_dir_from_env())
+    )
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        # The app owns the client, so it closes the connection pool on shutdown.
+        # Close is idempotent, which keeps an injected client's owner free to
+        # close it too.
+        yield
+        client.close()
 
     app = FastAPI(
         title="WhydidIBlunder API",
@@ -78,7 +100,10 @@ def create_app(
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,  # nothing here needs a second documentation UI
+        lifespan=lifespan,
     )
+    # The routes read the client from here; there is exactly one per process.
+    app.state.chesscom = client
 
     app.add_middleware(
         CORSMiddleware,
@@ -165,4 +190,5 @@ def create_app(
             },
         )
 
+    app.include_router(api_router)
     return app
