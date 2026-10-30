@@ -733,7 +733,7 @@
   background: transparent;
 }
 
-.analysis-placeholder {
+.inline-notice {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -746,10 +746,140 @@
   background: var(--surface-muted);
 }
 
-.analysis-placeholder p {
+.inline-notice p {
   margin: 0;
   color: var(--ink-muted);
   font-size: 0.9rem;
+}
+
+/* --- Analysis lifecycle -------------------------------------------------- */
+
+.analysis-page {
+  max-width: 52rem;
+}
+
+.analysis-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.analysis-context p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.analysis-card {
+  max-width: 42rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.analysis-card--done {
+  border-color: var(--success-border);
+}
+
+.analysis-card--failed {
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
+}
+
+.analysis-card--cancelled {
+  border-color: var(--warning-border);
+}
+
+.analysis-kicker {
+  margin-bottom: 0.65rem;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.analysis-card h2 {
+  margin-bottom: 0.7rem;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.analysis-progress {
+  position: relative;
+  overflow: hidden;
+  height: 0.55rem;
+  margin: var(--space-5) 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.analysis-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: analysis-progress 1.3s ease-in-out infinite;
+}
+
+@keyframes analysis-progress {
+  from {
+    transform: translateX(-115%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.analysis-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.6rem;
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.analysis-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.analysis-facts dt {
+  color: var(--ink-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.analysis-facts dd {
+  margin: 0;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-card .form-error {
+  margin-top: var(--space-4);
+}
+
+.analysis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }
 
 .app-footer {
@@ -828,5 +958,23 @@
     justify-content: space-between;
     width: 100%;
     margin-left: 0;
+  }
+
+  .analysis-context {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .analysis-progress-bar {
+    animation: none;
+  }
+
+  .analysis-progress-bar {
+    width: 100%;
+    opacity: 0.55;
   }
 }

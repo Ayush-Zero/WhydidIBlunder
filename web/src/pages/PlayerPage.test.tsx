@@ -1,7 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import analyzeFixture from '../api/fixtures/analyze.json'
 import gamesFixture from '../api/fixtures/games.json'
 import { jsonResponse } from '../test/http'
 import { PlayerPage } from './PlayerPage'
@@ -17,8 +23,12 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function respond(body: unknown, status = 200) {
-  fetchMock.mockResolvedValueOnce(jsonResponse(body, { status }))
+function respond(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+) {
+  fetchMock.mockResolvedValueOnce(jsonResponse(body, { status, headers }))
 }
 
 function renderPlayerPage(username: string, search = '') {
@@ -31,6 +41,30 @@ function renderPlayerPage(username: string, search = '') {
   )
 }
 
+function LocationProbe() {
+  const location = useLocation()
+  return (
+    <div>
+      <p data-testid="location-path">{location.pathname}</p>
+      <p data-testid="location-state">{JSON.stringify(location.state)}</p>
+    </div>
+  )
+}
+
+function renderPlayerWithAnalysis(username: string, search = '') {
+  return render(
+    <MemoryRouter initialEntries={[`/player/${username}${search}`]}>
+      <Routes>
+        <Route path="/player/:username" element={<PlayerPage />} />
+        <Route
+          path="/player/:username/analysis/:jobId"
+          element={<LocationProbe />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 function requestUrl(index = -1): string {
   const call = fetchMock.mock.calls.at(index)
   if (!call) throw new Error('fetch was not called')
@@ -38,6 +72,14 @@ function requestUrl(index = -1): string {
   if (typeof input === 'string') return input
   if (input instanceof URL) return input.href
   return input.url
+}
+
+function requestBody(index = -1): unknown {
+  const call = fetchMock.mock.calls.at(index)
+  if (!call) throw new Error('fetch was not called')
+  const [, init] = call
+  if (!init?.body) throw new Error('request had no body')
+  return JSON.parse(String(init.body))
 }
 
 function fromPositionGame() {
@@ -202,5 +244,128 @@ describe('player discovery', () => {
       await screen.findAllByRole('heading', { level: 3 }),
     ).toHaveLength(2)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('starts a new analysis and carries the game and filters', async () => {
+    const game = gamesFixture.games[0]
+    respond(gamesFixture)
+    respond({ ...analyzeFixture, reused: false }, 202)
+
+    renderPlayerWithAnalysis('beast-ash', '?months=6')
+
+    const user = userEvent.setup()
+    const [analyze] = await screen.findAllByRole('button', {
+      name: /^analyze$/i,
+    })
+    await user.click(analyze)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location-path')).toHaveTextContent(
+        `/player/beast-ash/analysis/${analyzeFixture.job_id}`,
+      ),
+    )
+
+    expect(requestUrl(0)).toBe(
+      '/api/player/beast-ash/games?months=6&max_games=50',
+    )
+    expect(requestUrl(1)).toBe('/api/analyze')
+    expect(requestBody(1)).toEqual({
+      username: 'beast-ash',
+      game_key: game.game_key,
+      months: 6,
+    })
+    expect(
+      JSON.parse(screen.getByTestId('location-state').textContent ?? 'null'),
+    ).toMatchObject({
+      game: { game_key: game.game_key },
+      months: 6,
+      reused: false,
+      returnTo: '/player/beast-ash?months=6',
+    })
+  })
+
+  it('navigates to a reused job with the reused flag', async () => {
+    respond(gamesFixture)
+    respond({ ...analyzeFixture, reused: true }, 200)
+
+    renderPlayerWithAnalysis('beast-ash')
+
+    const user = userEvent.setup()
+    const [, analyze] = await screen.findAllByRole('button', {
+      name: /^analyze$/i,
+    })
+    await user.click(analyze)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location-path')).toHaveTextContent(
+        `/player/beast-ash/analysis/${analyzeFixture.job_id}`,
+      ),
+    )
+
+    expect(
+      JSON.parse(screen.getByTestId('location-state').textContent ?? 'null'),
+    ).toMatchObject({
+      game: { game_key: gamesFixture.games[1].game_key },
+      months: 3,
+      reused: true,
+      returnTo: '/player/beast-ash',
+    })
+  })
+
+  it('shows a recoverable error when the analysis cannot start', async () => {
+    respond(gamesFixture)
+    respond(
+      { detail: 'You have reached the analysis limit.' },
+      429,
+      { 'Retry-After': '30' },
+    )
+
+    renderPlayerPage('beast-ash')
+
+    const user = userEvent.setup()
+    const [analyze] = await screen.findAllByRole('button', {
+      name: /^analyze$/i,
+    })
+    await user.click(analyze)
+
+    expect(
+      await screen.findByRole('heading', { name: /analysis limit reached/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/try again in 30 seconds/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /games for beast-ash/i })).toBeInTheDocument()
+
+    await waitFor(() => expect(analyze).toBeEnabled())
+  })
+
+  it('explains when C2 returns a stored report instead of a job', async () => {
+    const game = gamesFixture.games[0]
+    respond(gamesFixture)
+    respond({ ...analyzeFixture, job_id: null, status: 'done' }, 200)
+
+    renderPlayerPage('beast-ash')
+
+    const user = userEvent.setup()
+    const [analyze] = await screen.findAllByRole('button', {
+      name: /^analyze$/i,
+    })
+    await user.click(analyze)
+
+    const notice = (
+      await screen.findByText(/a stored report already exists for/i)
+    ).closest('aside')
+    expect(notice).not.toBeNull()
+    expect(
+      within(notice as HTMLElement).getByText(
+        new RegExp(`${game.white.username}\\s+vs\\s+${game.black.username}`, 'i'),
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/move-by-move review screen is not connected yet/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('location-path'),
+    ).not.toBeInTheDocument()
   })
 })

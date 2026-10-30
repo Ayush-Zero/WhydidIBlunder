@@ -18,9 +18,9 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   correctness and the safety review) is signed off; see
   [`docs/safety-review.md`](docs/safety-review.md).
 - **Phase 3 - frontend:** in progress. A1 (the positions + phase bridge), A2
-  (the routed Vite shell), A3 (the typed API client + app shell) and B1 (player
-  search + game discovery) are complete. The phase work breakdowns are
-  maintained locally and are not published.
+  (the routed Vite shell), A3 (the typed API client + app shell), B1 (player
+  search + game discovery) and B2 (the analysis lifecycle) are complete. The
+  phase work breakdowns are maintained locally and are not published.
 
 > **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
 > sample from about 20 games to 5 and agreed with the flags; the threshold
@@ -40,6 +40,9 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   phase labels for the review board.
 - Player discovery: username search, time-class and archive filters, game ratings,
   results, bot/custom-start badges and explicit empty/error states.
+- Analysis lifecycle from a discovered game: start or resume a server-side job,
+  poll real partial progress, cancel once, ignore stale responses, and preserve
+  the saved prefix on failure or cancellation. Reloading the job URL resumes it.
 - A routed frontend shell with a same-origin dev proxy, a typed API client,
   mapped transport errors, an error boundary and offline build/test/lint
   scripts.
@@ -111,7 +114,7 @@ Remove-Item Env:RUN_LIVE_TESTS
 
 See [`docs/testing.md`](docs/testing.md) for what each layer protects.
 
-Frontend tests are offline too:
+Frontend tests are offline too (Vitest, React Testing Library and MSW):
 
 ```powershell
 cd web

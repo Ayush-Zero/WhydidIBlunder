@@ -15,9 +15,16 @@ import {
 interface GameCardProps {
   game: GameSummary
   onAnalyze?: (game: GameSummary) => void
+  analyzing?: boolean
+  analysisBusy?: boolean
 }
 
-export function GameCard({ game, onAnalyze }: GameCardProps) {
+export function GameCard({
+  game,
+  onAnalyze,
+  analyzing = false,
+  analysisBusy = false,
+}: GameCardProps) {
   const titleId = useId()
   const noteId = useId()
   const outcome = userOutcome(game)
@@ -114,11 +121,14 @@ export function GameCard({ game, onAnalyze }: GameCardProps) {
           <button
             className="button button--secondary button--small"
             type="button"
-            disabled={blockedReason !== null || onAnalyze === undefined}
+            disabled={
+              blockedReason !== null || onAnalyze === undefined || analysisBusy
+            }
+            aria-busy={analyzing || undefined}
             aria-describedby={blockedReason ? noteId : undefined}
             onClick={() => onAnalyze?.(game)}
           >
-            Analyze
+            {analyzing ? 'Starting…' : 'Analyze'}
           </button>
         </div>
       </footer>

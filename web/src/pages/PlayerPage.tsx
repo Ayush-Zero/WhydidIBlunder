@@ -14,6 +14,10 @@ import { LoadingState } from '../components/LoadingState'
 import { SearchForm } from '../components/SearchForm'
 import { GameCard } from '../components/GameCard'
 import {
+  analysisPath,
+  type AnalysisLocationState,
+} from '../lib/analysis'
+import {
   DEFAULT_DISCOVERY_FILTERS,
   MAX_GAMES_DEFAULT,
   MONTHS_DEFAULT,
@@ -46,7 +50,10 @@ export function PlayerPage() {
     state: LoadState
   }>({ requestKey: '', state: { status: 'idle' } })
   const [retryToken, setRetryToken] = useState(0)
-  const [selectedGame, setSelectedGame] = useState<GameSummary | null>(null)
+  const [startingGameKey, setStartingGameKey] = useState<string | null>(null)
+  const [startError, setStartError] = useState<unknown | null>(null)
+  const [storedReportGame, setStoredReportGame] =
+    useState<GameSummary | null>(null)
 
   const usernameIsValid = USERNAME_PATTERN.test(username)
   const requestKey = [
@@ -104,7 +111,7 @@ export function PlayerPage() {
   ])
 
   function handleSearch(search: DiscoverySearch) {
-    setSelectedGame(null)
+    clearAnalysisNotice()
     const nextPath = playerPath(search)
     if (nextPath === `${location.pathname}${location.search}`) {
       setRetryToken((value) => value + 1)
@@ -118,13 +125,52 @@ export function PlayerPage() {
   }
 
   function resetFilters() {
-    setSelectedGame(null)
+    clearAnalysisNotice()
     navigate(
       playerPath({
         username,
         ...DEFAULT_DISCOVERY_FILTERS,
       }),
     )
+  }
+
+  function clearAnalysisNotice() {
+    setStartingGameKey(null)
+    setStartError(null)
+    setStoredReportGame(null)
+  }
+
+  async function handleAnalyze(game: GameSummary) {
+    if (startingGameKey !== null) return
+
+    setStartingGameKey(game.game_key)
+    setStartError(null)
+    setStoredReportGame(null)
+
+    try {
+      const response = await api.analyzeGame({
+        username,
+        game_key: game.game_key,
+        months: filters.months,
+      })
+
+      if (response.job_id) {
+        const state: AnalysisLocationState = {
+          game,
+          months: filters.months,
+          reused: response.reused,
+          returnTo: `${location.pathname}${location.search}`,
+        }
+        navigate(analysisPath(username, response.job_id), { state })
+        return
+      }
+
+      setStoredReportGame(game)
+    } catch (error) {
+      if (!isAbortError(error)) setStartError(error)
+    } finally {
+      setStartingGameKey(null)
+    }
   }
 
   const hasActiveFilters =
@@ -192,23 +238,31 @@ export function PlayerPage() {
             ) : null}
           </div>
 
-          {selectedGame ? (
-            <aside className="analysis-placeholder" role="status">
+          {storedReportGame ? (
+            <aside className="inline-notice" role="status">
               <p>
+                A stored report already exists for{' '}
                 <strong>
-                  {selectedGame.white.username} vs {selectedGame.black.username}
-                </strong>{' '}
-                is selected. The move-by-move analysis controls are not
-                connected yet.
+                  {storedReportGame.white.username} vs{' '}
+                  {storedReportGame.black.username}
+                </strong>
+                . The move-by-move review screen is not connected yet.
               </p>
               <button
                 className="button button--secondary button--small"
                 type="button"
-                onClick={() => setSelectedGame(null)}
+                onClick={() => setStoredReportGame(null)}
               >
-                Clear selection
+                Dismiss
               </button>
             </aside>
+          ) : null}
+
+          {startError ? (
+            <AnalysisStartError
+              error={startError}
+              onDismiss={() => setStartError(null)}
+            />
           ) : null}
 
           {load.status === 'idle' || load.status === 'loading' ? (
@@ -245,7 +299,12 @@ export function PlayerPage() {
             <ul className="game-list" aria-label={`Games for ${displayUsername}`}>
               {data.games.map((game) => (
                 <li key={game.game_key}>
-                  <GameCard game={game} onAnalyze={setSelectedGame} />
+                  <GameCard
+                    game={game}
+                    onAnalyze={handleAnalyze}
+                    analyzing={startingGameKey === game.game_key}
+                    analysisBusy={startingGameKey !== null}
+                  />
                 </li>
               ))}
             </ul>
@@ -254,6 +313,79 @@ export function PlayerPage() {
       )}
     </section>
   )
+}
+
+interface AnalysisStartErrorProps {
+  error: unknown
+  onDismiss: () => void
+}
+
+function AnalysisStartError({ error, onDismiss }: AnalysisStartErrorProps) {
+  const copy = describeAnalysisStartError(error)
+
+  return (
+    <ErrorState
+      title={copy.title}
+      message={copy.message}
+      action={
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
+      }
+    />
+  )
+}
+
+function describeAnalysisStartError(error: unknown): ErrorCopy {
+  if (!isApiError(error)) {
+    return { title: 'Could not start the analysis', message: errorMessage(error) }
+  }
+
+  switch (error.kind) {
+    case 'not-found':
+      return { title: 'Game not found', message: error.message }
+    case 'validation':
+      return { title: 'This game cannot be analysed', message: error.message }
+    case 'rate-limited': {
+      const wait = error.retryAfterSeconds
+        ? ` Try again in ${formatWait(error.retryAfterSeconds)}.`
+        : ' Try again later.'
+      return { title: 'Analysis limit reached', message: `${error.message}${wait}` }
+    }
+    case 'upstream':
+      return {
+        title: 'Chess.com is not responding',
+        message: error.message,
+      }
+    case 'unavailable':
+      return {
+        title: 'The analysis service is not ready',
+        message: error.message,
+      }
+    case 'network':
+      return {
+        title: 'Can’t reach the analysis server',
+        message: error.message,
+      }
+    case 'timeout':
+      return { title: 'The server took too long', message: error.message }
+    case 'conflict':
+      return { title: 'That game cannot be analysed', message: error.message }
+    default:
+      return { title: 'Could not start the analysis', message: error.message }
+  }
+}
+
+function formatWait(seconds: number): string {
+  if (seconds < 60) {
+    return `${Math.max(1, Math.ceil(seconds))} seconds`
+  }
+  const minutes = Math.ceil(seconds / 60)
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
 }
 
 interface GamesErrorProps {

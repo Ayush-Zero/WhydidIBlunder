@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { AnalysisPage } from './pages/AnalysisPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PlayerPage } from './pages/PlayerPage'
@@ -11,6 +12,10 @@ function App() {
       <Route element={<AppShell />}>
         <Route index element={<HomePage />} />
         <Route path="player/:username" element={<PlayerPage />} />
+        <Route
+          path="player/:username/analysis/:jobId"
+          element={<AnalysisPage />}
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
