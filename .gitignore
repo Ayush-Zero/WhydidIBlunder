@@ -60,7 +60,11 @@ pnpm-debug.log*
 # (no volumes are stored in-repo; data lives on the host)
 
 # ---- Session logs (local conversation / brief files) ----
-opencode/
+# Keep the phase work breakdowns in the repo; everything else here is local.
+opencode/*
+!opencode/phase1_breakdown.md
+!opencode/phase2_breakdown.md
+!opencode/phase3_breakdown.md
 
 # ---- Local planning notes (not published) ----
 plan.md

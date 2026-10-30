@@ -16,9 +16,10 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   analyses, cancels them, serves stored reports, returns an explain stub, and
   rate-limits new analyses. Milestone D (end-to-end verification, cache
   correctness and the safety review) is signed off; see
-  [`docs/phase2_breakdown.md`](docs/phase2_breakdown.md) and
+  [`opencode/phase2_breakdown.md`](opencode/phase2_breakdown.md) and
   [`docs/safety-review.md`](docs/safety-review.md).
-- **Phase 3 - frontend:** not started.
+- **Phase 3 - frontend:** planned. The work breakdown is
+  [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md).
 
 > **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
 > sample from about 20 games to 5 and agreed with the flags; the threshold
@@ -79,10 +80,12 @@ See [`docs/testing.md`](docs/testing.md) for what each layer protects.
 
 ## Documentation
 
-- [`docs/phase1_breakdown.md`](docs/phase1_breakdown.md) - analyzer work
+- [`opencode/phase1_breakdown.md`](opencode/phase1_breakdown.md) - analyzer work
   breakdown and frozen contract.
-- [`docs/phase2_breakdown.md`](docs/phase2_breakdown.md) - API + worker plan
-  and current status.
+- [`opencode/phase2_breakdown.md`](opencode/phase2_breakdown.md) - API + worker
+  plan and current status.
+- [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md) - frontend and
+  interactive-review plan.
 - [`docs/api.md`](docs/api.md) - endpoint contracts, defaults and error mapping.
 - [`docs/ownership.md`](docs/ownership.md) - **security, ownership and abuse
   model** (C8).

@@ -2,7 +2,7 @@
 
 This exists so the API process and the worker talk to Chess.com in exactly one
 place, with the awkward parts already handled. The awkward parts, from
-``docs/phase2_breakdown.md``:
+``opencode/phase2_breakdown.md``:
 
 * **Response caching.** Chess.com is public and rate-limited by goodwill, not by
   a contract. Archives and past months are immutable, so their responses are
