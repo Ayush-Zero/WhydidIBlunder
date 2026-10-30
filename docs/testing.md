@@ -31,6 +31,13 @@ runs the real worker (and therefore real Stockfish) to drain the job, polls
 validates against the frozen schema, is served verbatim, and a second request
 reuses it without requeueing — but again not which moves are flagged.
 
+`tests/test_e2e_cancel.py` is `live` too and is **D2**: while a real worker is
+mid-analysis in another thread, the API cancels the job. It asserts the job
+settles `cancelled` (not `done`), the persisted prefix survives and is what C3
+returns, no report is written, and the Stockfish process has exited (checked by
+pid). It is run repeatedly in review because it is the one test that depends on
+timing.
+
 ```powershell
 $env:RUN_LIVE_TESTS='1'
 .\.venv\Scripts\python.exe -m pytest -m live
@@ -56,6 +63,7 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Frozen fixture, exact flags | `tests/test_golden_game.py` | a *silently* different verdict on the sample game |
 | Live smoke (opt-in) | `tests/test_live_engine.py` | the engine plumbing breaking (start, score, valid report) — never the classification |
 | Service E2E (opt-in) | `tests/test_e2e_service.py` | the C2 → worker → C3 → C5 spine breaking: a job that never runs, a report that does not validate or is reshaped by the API, or a finished report being requeued |
+| Cancel E2E (opt-in) | `tests/test_e2e_cancel.py` | a cancel being ignored, a stopped job writing a report, partial plies lost, or a Stockfish process orphaned after the worker exits |
 
 ## The golden fixture
 
