@@ -69,6 +69,7 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Worker loop | `tests/test_worker.py` | a job stuck `running` after a failure or a cancel, progress not advancing, plies lost on cancel, the durable cache not actually saving searches |
 | Chess.com client | `tests/test_chesscom.py` | a 404-for-empty-month crashing, bots/from-position games slipping through, an uncached or non-atomic response cache |
 | API skeleton | `tests/test_app.py` | `/health` reporting healthy while the database is unusable; CORS opening up |
+| Report positions | `tests/test_positions.py`, `tests/test_api_positions.py` | SAN replay drifting from the stored report, FENs/phases being wrong, a corrupt report becoming a partial board, or positions leaking between colours |
 | Frozen fixture, self-consistency | `tests/test_report.py` | a report that no longer recomputes from its own evals |
 | Frozen fixture, exact flags | `tests/test_golden_game.py` | a *silently* different verdict on the sample game |
 | Live smoke (opt-in) | `tests/test_live_engine.py` | the engine plumbing breaking (start, score, valid report) — never the classification |

@@ -17,6 +17,11 @@ configuration (TLS, proxy limits, log retention — see
 The review below is the evidence for that sentence. Where a risk is accepted
 rather than eliminated, it is recorded as a residual instead of omitted.
 
+> **Phase 3 A1 addendum.** The positions bridge
+> (`GET /api/games/{game_key}/positions`) reads a stored report and replays its
+> SANs with python-chess. It accepts no FEN, launches no engine, and makes no
+> upstream request. The invariant and the residuals above are unchanged.
+
 ## 1. Process execution: there is no shell
 
 - The only production process launch is

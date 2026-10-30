@@ -18,7 +18,8 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   correctness and the safety review) is signed off; see
   [`opencode/phase2_breakdown.md`](opencode/phase2_breakdown.md) and
   [`docs/safety-review.md`](docs/safety-review.md).
-- **Phase 3 - frontend:** planned. The work breakdown is
+- **Phase 3 - frontend:** in progress. A1 (the positions + phase bridge) is
+  complete; the work breakdown is
   [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md).
 
 > **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
@@ -35,6 +36,8 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
 - A position cache keyed by normalized FEN, engine version, depth and MultiPV.
 - FastAPI endpoints for listing, queueing, polling, cancelling, reports and the
   explain placeholder.
+- A read-only position bridge that replays a stored report into per-ply FENs and
+  phase labels for the review board.
 - Per-IP rate limiting on `POST /api/analyze`.
 
 ## Quick start (Windows / PowerShell)

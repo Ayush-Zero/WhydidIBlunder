@@ -1,4 +1,4 @@
-# API contract — Phase 2
+# API contract
 
 The API is versioned by its URL prefix (`/api`) and documented live at
 `/api/docs` (OpenAPI at `/api/openapi.json`). This file records the decisions
@@ -8,6 +8,10 @@ behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 > C5 (report), C6 (explain stub) and C7 (rate limiting) are implemented. C8
 > (ownership / abuse model) is documented in
 > [`docs/ownership.md`](ownership.md). Milestone C is complete.
+>
+> **Phase 3 A1:** `GET /api/games/{game_key}/positions` (board positions and
+> phase labels) is implemented below. The Phase 3 try-again endpoint is not
+> built yet.
 
 ---
 
@@ -350,6 +354,62 @@ Field notes:
 There is no auth (C8): anyone who knows the key and colour can fetch the report.
 Neither is a secret. See [`docs/ownership.md`](ownership.md) for the full
 capability model.
+
+---
+
+## Phase 3 A1 — `GET /api/games/{game_key}/positions?user_color=...`
+
+Derives the board state for every ply of a stored report. The report stores SAN
+and evaluations, not FENs; this read-only endpoint replays the SANs from the
+standard starting position and returns both FENs plus the existing phase hint.
+It is pure: no engine, no Chess.com fetch, and no reshaping of the stored
+report.
+
+### Response — `200`
+
+```json
+{
+  "game_key": "chesscom:game-1",
+  "user_color": "white",
+  "starting_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "positions": [
+    {
+      "ply": 1,
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "phase": "opening"
+    }
+  ]
+}
+```
+
+Field notes:
+
+- **One entry per ply**, in report order. `positions[i].ply == i + 1`.
+- **`fen_before` is the position in which the mover chose the move.**
+  `fen_after` is after the move is pushed.
+- **`phase` describes `fen_before`**, using
+  `analyzer.phase.detect_phase(board, ply - 1)`. It is a UI hint, never a
+  classification input.
+- **The standard start is guaranteed by C2.** Games beginning from a custom
+  position are refused there because their ply numbering would corrupt phase
+  labels; this endpoint never needs a starting FEN.
+- **No schema change.** The C5 report remains the frozen v1 body, served
+  verbatim. The frontend fetches this view alongside it.
+- **`game_key` is opaque and may contain `:` and `/`**, so the route uses a path
+  converter. URL-encode reserved characters such as `?`, `#` and `%`.
+
+### Errors
+
+| Status | When |
+|---|---|
+| `404` | No report for this `(game_key, user_color)`, including when only the other colour has one. |
+| `409` | The stored report exists but cannot be replayed (invalid JSON, missing moves, wrong side, illegal SAN, or a gap in ply numbers). |
+| `422` | Missing or invalid `user_color`, or an over-long key. |
+| `503` | The database has not been initialised yet. |
+
+This is a read of the same public game data as C5. There is no auth and no new
+secret; anyone who knows the key and colour can derive the positions.
 
 ---
 

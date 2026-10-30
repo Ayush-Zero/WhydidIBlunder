@@ -20,6 +20,10 @@ process directly; the database is the only channel.
 ``GET /api/games/{game_key}/report`` serves the frozen Phase 1 report that the
 worker stored. It is a pure read: no engine, no Chess.com fetch, no reshaping.
 
+``GET /api/games/{game_key}/positions`` is the Phase 3 A1 bridge. It replays the
+stored report's SANs into FENs and phase labels for the review board. It is a
+pure read of the report and does not launch Stockfish.
+
 ``POST /api/explain`` is a Phase 2 stub. It accepts the Phase 5 LLM input shape
 and returns a placeholder; no provider keys, prompts or LLM calls live here yet.
 
@@ -64,6 +68,7 @@ from server.chesscom import (
     is_bot,
     is_from_position,
 )
+from server.positions import ReportReplayError, replay_report
 from server.ratelimit import client_ip
 
 __all__ = [
@@ -72,10 +77,12 @@ __all__ = [
     "AnalyzeResponse",
     "CancelResponse",
     "GameList",
+    "GamePositions",
     "GameSummary",
     "JobMove",
     "JobStatus",
     "PlayerSummary",
+    "ReviewPosition",
 ]
 
 #: Chess.com usernames are letters, digits, ``_`` and ``-``. Constraining the
@@ -130,6 +137,28 @@ class GameList(BaseModel):
     username: str
     count: int
     games: list[GameSummary]
+
+
+class ReviewPosition(BaseModel):
+    """One ply's board state for the review screen.
+
+    ``phase`` describes ``fen_before`` — the position in which the mover chose
+    the move. It is a UI hint, not a classification input.
+    """
+
+    ply: int
+    fen_before: str
+    fen_after: str
+    phase: Literal["opening", "middlegame", "endgame"]
+
+
+class GamePositions(BaseModel):
+    """The position bridge for one stored report."""
+
+    game_key: str
+    user_color: Literal["white", "black"]
+    starting_fen: str
+    positions: list[ReviewPosition]
 
 
 # --- normalisation --------------------------------------------------------
@@ -763,6 +792,87 @@ def get_game_report(
             detail=f"no report for game {game_key!r} as {user_color}",
         )
     return Response(content=body, media_type="application/json")
+
+
+# --- Phase 3 A1: positions + phase for the review board ------------------
+
+
+@api_router.get(
+    "/games/{game_key:path}/positions",
+    response_model=GamePositions,
+    summary="Derive board positions and phase labels from a stored report",
+    responses={
+        404: {"description": "No report for this game and colour."},
+        409: {"description": "The stored report cannot be replayed."},
+        503: {"description": "The database has not been initialised yet."},
+    },
+)
+def get_game_positions(
+    request: Request,
+    game_key: str = Path(
+        ...,
+        min_length=1,
+        max_length=2048,
+        description="Opaque key from C1; may contain ':' and '/'.",
+    ),
+    user_color: Literal["white", "black"] = Query(
+        ...,
+        description="Which side's stored report to replay.",
+    ),
+) -> GamePositions:
+    """Return FENs and phase labels for every ply in a stored report.
+
+    The report deliberately stores SAN rather than FENs.  Replaying those SANs
+    from the standard start is deterministic because C2 refuses games that begin
+    from a custom position.  The replay is pure: no engine and no upstream
+    request.  A corrupt report is a ``409`` rather than a partial board.
+    """
+    connection = db.connect(request.app.state.db_path)
+    try:
+        try:
+            row = db.get_report(connection, game_key, user_color)
+            body = None if row is None else row["report_json"]
+        except sqlite3.OperationalError as exc:
+            raise HTTPException(
+                status_code=503, detail="database is not ready"
+            ) from exc
+    finally:
+        connection.close()
+
+    if body is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no report for game {game_key!r} as {user_color}",
+        )
+
+    try:
+        report = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=409, detail="stored report is not valid JSON"
+        ) from exc
+
+    try:
+        replay = replay_report(report)
+    except ReportReplayError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"stored report cannot be replayed: {exc}"
+        ) from exc
+
+    return GamePositions(
+        game_key=game_key,
+        user_color=user_color,
+        starting_fen=replay.starting_fen,
+        positions=[
+            ReviewPosition(
+                ply=position.ply,
+                fen_before=position.fen_before,
+                fen_after=position.fen_after,
+                phase=position.phase,
+            )
+            for position in replay.positions
+        ],
+    )
 
 
 # --- C6: explain one move (stub) -----------------------------------------
