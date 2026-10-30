@@ -66,7 +66,7 @@
 |----|------|-------------|-----------|
 | **D1** | **E2E happy path** | POST a game → poll → full report (this *is* the phase's done-criterion) | ✅ Done — `tests/test_e2e_service.py` (live): recorded Chess.com fixtures + real Stockfish drive C2 → worker → C3 → C5, assert the report is valid and served verbatim, and that a second request reuses it without requeueing |
 | **D2** | Cancel E2E | Cancel mid-flight | ✅ Done — `tests/test_e2e_cancel.py` (live): a real worker is cancelled via C4 while `running`; job settles `cancelled`, partial plies remain, no report is written, and the Stockfish pid is gone |
-| **D3** | Reaper E2E | Kill worker mid-job | Job requeues and completes; no job stuck `running` forever |
+| **D3** | Reaper E2E | Kill worker mid-job | ✅ Done — `tests/test_e2e_reaper.py` (offline): a real helper process is killed mid-analysis; the next worker's scheduled reaper requeues the stale `running` job, completes it on attempt 2, and leaves nothing `running` |
 | **D4** | Cache correctness suite | Engine-version key, depth-≥ rule, FEN normalisation (halfmove clock), poisoning | All green; documented key definition |
 | **D5** | Safety review | No user input to the shell — only constructed FENs/UCI options; empty-month / bot / from-position handled | Checklist signed off in the PR |
 
@@ -79,7 +79,8 @@
   and a real Stockfish.
 - [x] **Cancel mid-flight** works and leaves no orphaned engine. *(plan's done-criterion)*
   Verified by `tests/test_e2e_cancel.py` against a real Stockfish.
-- [ ] **Reaper verified**: kill a worker, job requeues.
+- [x] **Reaper verified**: kill a worker, job requeues.
+  Verified by `tests/test_e2e_reaper.py` against a killed helper process.
 - [ ] Cache **cannot poison itself**: engine-versioned + depth-aware + normalised key.
 - [x] Rate limit enforced; `X-Forwarded-For` trusted only from Caddy.
 - [x] No auth by design; unguessable UUIDs; **no secrets in IDs**. See
@@ -128,7 +129,8 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    ~~**C7** — rate limiting~~ ✅ done. ~~**C8** — ownership / abuse docs~~ ✅
    done; see `docs/ownership.md`. ~~**D1** — end-to-end happy path~~ ✅ done;
    see `tests/test_e2e_service.py`. ~~**D2** — cancel E2E~~ ✅ done; see
-   `tests/test_e2e_cancel.py`. **D3** (reaper E2E) is next.
+   `tests/test_e2e_cancel.py`. ~~**D3** — reaper E2E~~ ✅ done; see
+   `tests/test_e2e_reaper.py`. **D4** (cache correctness) is next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

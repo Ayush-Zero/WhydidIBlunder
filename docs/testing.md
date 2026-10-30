@@ -3,7 +3,8 @@
 ## Offline by default
 
 `pytest` **never** launches Stockfish. The whole suite is pure logic plus frozen
-fixtures, so it runs anywhere in about a second:
+fixtures (plus one killed-helper-process reaper test), so it runs anywhere in
+well under a minute:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -38,6 +39,13 @@ returns, no report is written, and the Stockfish process has exited (checked by
 pid). It is run repeatedly in review because it is the one test that depends on
 timing.
 
+`tests/test_e2e_reaper.py` is **D3** and is **not** live: it kills a helper
+*process* mid-analysis, then lets the next worker's scheduled reaper requeue and
+complete the job. The helper uses a slow fake engine, so no Stockfish and no
+network are involved; a real engine crash cannot be cleaned up from inside the
+killed process (that is D2's job). `JOB_TIMEOUT_SECONDS=0` stands in for the
+production 180-second timeout.
+
 ```powershell
 $env:RUN_LIVE_TESTS='1'
 .\.venv\Scripts\python.exe -m pytest -m live
@@ -64,6 +72,7 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Live smoke (opt-in) | `tests/test_live_engine.py` | the engine plumbing breaking (start, score, valid report) — never the classification |
 | Service E2E (opt-in) | `tests/test_e2e_service.py` | the C2 → worker → C3 → C5 spine breaking: a job that never runs, a report that does not validate or is reshaped by the API, or a finished report being requeued |
 | Cancel E2E (opt-in) | `tests/test_e2e_cancel.py` | a cancel being ignored, a stopped job writing a report, partial plies lost, or a Stockfish process orphaned after the worker exits |
+| Reaper E2E | `tests/test_e2e_reaper.py` | a killed worker leaving a job `running` forever, a reaped job losing its partial plies, or a retry reusing the dead worker's attempt |
 
 ## The golden fixture
 
