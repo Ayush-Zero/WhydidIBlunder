@@ -35,7 +35,9 @@ same origin as the API and leave the default in place.
 Milestone A3 adds the typed transport client for C1-C5, positions and try; the
 fixture-tested abort/timeout handling and mapped API errors; and the shell's
 server-status indicator, error boundary and shared loading/empty/error states.
-Player search, the analysis lifecycle and the review board land in the next
+Milestone B1 adds username search at `/player/:username`, time-class/archive
+filters, game ratings and results, bot/custom-start badges, and the player
+discovery states. The analysis lifecycle and review board land in the next
 milestones.
 
 The client is in `src/api/`: `types.ts` mirrors the wire contract, `endpoints.ts`

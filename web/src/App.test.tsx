@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import gamesFixture from './api/fixtures/games.json'
 import { jsonResponse } from './test/http'
 
 const fetchMock = vi.fn<typeof fetch>()
@@ -34,7 +36,48 @@ describe('routed shell', () => {
     expect(
       screen.getByRole('link', { name: /whydidiblunder home/i }),
     ).toBeInTheDocument()
+    expect(screen.getByLabelText(/chess\.com username/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /find games/i }),
+    ).toBeInTheDocument()
     expect(await screen.findByText('Server ready')).toBeInTheDocument()
+  })
+
+  it('searches from the home page and shows the game list', async () => {
+    fetchMock.mockImplementation((input) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url
+      if (url === '/health') {
+        return Promise.resolve(
+          jsonResponse({ status: 'ok', database: 'ok', schema_version: 1 }),
+        )
+      }
+      if (url.startsWith('/api/player/beast-ash/games')) {
+        return Promise.resolve(jsonResponse(gamesFixture))
+      }
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    })
+
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText(/chess\.com username/i), 'beast-ash')
+    await user.click(screen.getByRole('button', { name: /find games/i }))
+
+    expect(
+      await screen.findAllByRole('heading', { level: 3 }),
+    ).toHaveLength(2)
+    expect(
+      screen.getByRole('heading', { name: /games for beast-ash/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders the not-found page for an unknown route', async () => {

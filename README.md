@@ -18,8 +18,9 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   correctness and the safety review) is signed off; see
   [`docs/safety-review.md`](docs/safety-review.md).
 - **Phase 3 - frontend:** in progress. A1 (the positions + phase bridge), A2
-  (the routed Vite shell) and A3 (the typed API client + app shell) are complete.
-  The phase work breakdowns are maintained locally and are not published.
+  (the routed Vite shell), A3 (the typed API client + app shell) and B1 (player
+  search + game discovery) are complete. The phase work breakdowns are
+  maintained locally and are not published.
 
 > **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
 > sample from about 20 games to 5 and agreed with the flags; the threshold
@@ -37,6 +38,8 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   explain placeholder.
 - A read-only position bridge that replays a stored report into per-ply FENs and
   phase labels for the review board.
+- Player discovery: username search, time-class and archive filters, game ratings,
+  results, bot/custom-start badges and explicit empty/error states.
 - A routed frontend shell with a same-origin dev proxy, a typed API client,
   mapped transport errors, an error boundary and offline build/test/lint
   scripts.

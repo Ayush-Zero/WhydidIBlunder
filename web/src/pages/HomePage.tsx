@@ -1,4 +1,14 @@
+import { useNavigate } from 'react-router-dom'
+import { SearchForm } from '../components/SearchForm'
+import { playerPath, type DiscoverySearch } from '../lib/games'
+
 export function HomePage() {
+  const navigate = useNavigate()
+
+  function handleSearch(search: DiscoverySearch) {
+    navigate(playerPath(search))
+  }
+
   return (
     <section className="home-page" aria-labelledby="home-title">
       <p className="eyebrow">Game review</p>
@@ -8,16 +18,12 @@ export function HomePage() {
         thin client: no engine downloads and no direct Chess.com calls.
       </p>
 
-      <aside className="next-step" aria-labelledby="next-step-title">
-        <p className="next-step-label">Phase 3 · app shell</p>
-        <h2 id="next-step-title">
-          Player search and game discovery are next.
-        </h2>
-        <p>
-          The typed API boundary, server status and shared loading, empty and
-          error states are ready. The analysis flow will land here.
-        </p>
-      </aside>
+      <SearchForm onSubmit={handleSearch} submitLabel="Find games" autoFocus />
+
+      <p className="home-note">
+        No Chess.com login. We only read public games, then the server analyses
+        one of them at a time.
+      </p>
     </section>
   )
 }
