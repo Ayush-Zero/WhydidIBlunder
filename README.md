@@ -16,12 +16,10 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   analyses, cancels them, serves stored reports, returns an explain stub, and
   rate-limits new analyses. Milestone D (end-to-end verification, cache
   correctness and the safety review) is signed off; see
-  [`opencode/phase2_breakdown.md`](opencode/phase2_breakdown.md) and
   [`docs/safety-review.md`](docs/safety-review.md).
 - **Phase 3 - frontend:** in progress. A1 (the positions + phase bridge), A2
-  (the routed Vite shell) and A3 (the typed API client + app shell) are complete;
-  the work breakdown is
-  [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md).
+  (the routed Vite shell) and A3 (the typed API client + app shell) are complete.
+  The phase work breakdowns are maintained locally and are not published.
 
 > **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
 > sample from about 20 games to 5 and agreed with the flags; the threshold
@@ -121,12 +119,6 @@ npm run build
 
 ## Documentation
 
-- [`opencode/phase1_breakdown.md`](opencode/phase1_breakdown.md) - analyzer work
-  breakdown and frozen contract.
-- [`opencode/phase2_breakdown.md`](opencode/phase2_breakdown.md) - API + worker
-  plan and current status.
-- [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md) - frontend and
-  interactive-review plan.
 - [`web/README.md`](web/README.md) - frontend scripts, dev proxy and API boundary.
 - [`docs/api.md`](docs/api.md) - endpoint contracts, defaults and error mapping.
 - [`docs/ownership.md`](docs/ownership.md) - **security, ownership and abuse
