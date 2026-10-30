@@ -18,6 +18,7 @@ from __future__ import annotations
 import copy
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from fastapi.testclient import TestClient
@@ -165,6 +166,29 @@ def test_an_unknown_game_is_404(tmp_path):
 
     assert response.status_code == 404
     assert "chesscom:other" in response.json()["detail"]
+
+
+def test_a_sql_metacharacter_key_is_just_a_key_that_is_missing(tmp_path):
+    """D5: the report key is bound, never interpolated.
+
+    Quotes and an ``OR 1=1`` in the path are data. The request misses, and the
+    real row still reads — which would not survive a query built by string
+    concatenation.
+    """
+    injection = "chesscom:game-1' OR '1'='1"
+
+    with running_app(tmp_path) as (client, db_path):
+        _seed(db_path)
+        attempt = client.get(
+            f"/api/games/{quote(injection, safe='')}/report",
+            params={"user_color": "white"},
+        )
+        real = client.get(
+            "/api/games/chesscom:game-1/report", params={"user_color": "white"}
+        )
+
+    assert attempt.status_code == 404
+    assert real.status_code == 200
 
 
 def test_user_color_is_required(tmp_path):

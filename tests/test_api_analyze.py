@@ -167,6 +167,23 @@ def test_depth_and_multipv_come_from_config_not_the_request(tmp_path, monkeypatc
     assert row["multipv"] == 3
 
 
+@pytest.mark.parametrize("field", ["depth", "multipv", "threads"])
+def test_the_request_cannot_choose_analysis_cost(tmp_path, field):
+    """A caller must not be able to buy a deeper search (D5).
+
+    ``extra="forbid"`` makes the attempt an error rather than a silently ignored
+    field: silently dropping ``depth=40`` would be confusing, and accepting it
+    would make one request arbitrarily expensive.
+    """
+    payload = {"username": "beast-ash", "game_key": WHITE_KEY, field: 40}
+
+    with running_app(standard_routes(), tmp_path) as (client, _, db_path):
+        response = client.post("/api/analyze", json=payload)
+
+    assert response.status_code == 422
+    assert not db_path.exists(), "a rejected request must not touch the database"
+
+
 def test_analyze_accepts_a_bot_game(tmp_path):
     """Bots are included by default in C1, so they must be analysable here."""
     game = json.loads(json.dumps(WHITE_GAME))

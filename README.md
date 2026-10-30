@@ -12,10 +12,12 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
 
 - **Phase 1 - analyzer core:** complete. The output schema is frozen and
   covered by offline tests plus a golden-game fixture.
-- **Phase 2 - API + worker:** Milestone C is complete. The API lists games,
-  queues and polls analyses, cancels them, serves stored reports, returns an
-  explain stub, and rate-limits new analyses. Milestone D (end-to-end
-  verification and hardening) is next.
+- **Phase 2 - API + worker:** complete. The API lists games, queues and polls
+  analyses, cancels them, serves stored reports, returns an explain stub, and
+  rate-limits new analyses. Milestone D (end-to-end verification, cache
+  correctness and the safety review) is signed off; see
+  [`docs/phase2_breakdown.md`](docs/phase2_breakdown.md) and
+  [`docs/safety-review.md`](docs/safety-review.md).
 - **Phase 3 - frontend:** not started.
 
 > **Phase 0 gate:** the owner still needs to agree with roughly 90% of the
@@ -83,6 +85,8 @@ See [`docs/testing.md`](docs/testing.md) for what each layer protects.
 - [`docs/api.md`](docs/api.md) - endpoint contracts, defaults and error mapping.
 - [`docs/ownership.md`](docs/ownership.md) - **security, ownership and abuse
   model** (C8).
+- [`docs/safety-review.md`](docs/safety-review.md) - **D5 safety review**: no
+  shell, bound SQL, constructed engine input, and the edge-case policies.
 - [`docs/storage.md`](docs/storage.md) - schema and cache-key decisions.
 - [`docs/queue.md`](docs/queue.md) - atomic claim and cancellation.
 - [`docs/worker.md`](docs/worker.md) - worker loop and persistence ordering.

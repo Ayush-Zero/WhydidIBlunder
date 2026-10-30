@@ -63,6 +63,7 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Cache key logic | `tests/test_cache.py` | the cache poisoning itself: a key that ignores the halfmove clock or the engine build, or a shallow row answering a deep request |
 | Cache in front of the engine | `tests/test_cache_wiring.py` | the cache silently not being consulted, or surviving an engine bump |
 | Durable cache key | `tests/test_position_cache.py` | the SQLite backend inventing its own normalisation, serving across an engine/key-version bump, letting a shallow row overwrite a deep one, or duplicating a row on re-store |
+| Safety boundary | `tests/test_safety.py` | a shell (`shell=True`, `os.system`/`os.popen`) creeping into production code; the scanner itself going blind |
 | Storage | `tests/test_db.py` | WAL not actually set, migrations not idempotent, keys drifting from the plan, a migration that only runs on a *fresh* database |
 | Job queue | `tests/test_queue.py` | two workers claiming one job, contention surfacing as `database is locked`, a retried job wearing its last error |
 | Worker loop | `tests/test_worker.py` | a job stuck `running` after a failure or a cancel, progress not advancing, plies lost on cancel, the durable cache not actually saving searches |

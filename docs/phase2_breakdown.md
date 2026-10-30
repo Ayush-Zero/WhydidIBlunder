@@ -68,7 +68,7 @@
 | **D2** | Cancel E2E | Cancel mid-flight | ✅ Done — `tests/test_e2e_cancel.py` (live): a real worker is cancelled via C4 while `running`; job settles `cancelled`, partial plies remain, no report is written, and the Stockfish pid is gone |
 | **D3** | Reaper E2E | Kill worker mid-job | ✅ Done — `tests/test_e2e_reaper.py` (offline): a real helper process is killed mid-analysis; the next worker's scheduled reaper requeues the stale `running` job, completes it on attempt 2, and leaves nothing `running` |
 | **D4** | Cache correctness suite | Engine-version key, depth-≥ rule, FEN normalisation (halfmove clock), poisoning | ✅ Done — `tests/test_position_cache.py` (offline): the durable backend stores under the inherited `fen_key` (fullmove stripped, halfmove kept), an engine bump or key-version bump is a miss, shallow rows never satisfy deeper requests, deep rows report their true depth, duplicate stores upsert one row. Key definition documented in `docs/cache.md` |
-| **D5** | Safety review | No user input to the shell — only constructed FENs/UCI options; empty-month / bot / from-position handled | Checklist signed off in the PR |
+| **D5** | Safety review | No user input to the shell — only constructed FENs/UCI options; empty-month / bot / from-position handled | ✅ Done — `docs/safety-review.md` signed off: production code contains no shell (`tests/test_safety.py` AST tripwire), Stockfish receives only constructed positions and env-set integer options, SQL values are bound, a caller cannot set depth/MultiPV, and the empty-month / bot / from-position / no-PGN / no-`uuid` policies are covered by tests |
 
 ---
 
@@ -81,11 +81,21 @@
   Verified by `tests/test_e2e_cancel.py` against a real Stockfish.
 - [x] **Reaper verified**: kill a worker, job requeues.
   Verified by `tests/test_e2e_reaper.py` against a killed helper process.
-- [ ] Cache **cannot poison itself**: engine-versioned + depth-aware + normalised key.
+- [x] Cache **cannot poison itself**: engine-versioned + depth-aware + normalised key.
+  Verified by `tests/test_cache.py` and the durable-backend suite in
+  `tests/test_position_cache.py`; key definition in `docs/cache.md`.
 - [x] Rate limit enforced; `X-Forwarded-For` trusted only from Caddy.
 - [x] No auth by design; unguessable UUIDs; **no secrets in IDs**. See
   `docs/ownership.md`.
-- [ ] Runs as **1 worker, `Threads=1`, `Hash=256`**; scaling = more processes.
+- [x] Runs as **1 worker, `Threads=1`, `Hash=256`**; scaling = more processes.
+  The worker loop claims and processes one job at a time; `.env.example` pins the
+  engine to one thread and 256 MB. More throughput means more worker processes,
+  not more threads.
+- [x] Safety review signed off; see `docs/safety-review.md`.
+
+> **Phase 2 is complete.** The next project gate is Phase 0's threshold
+> validation (the owner agrees with roughly 90% of the flags on about 20 of
+> their own games) before Phase 3's frontend work starts.
 
 ---
 
@@ -131,8 +141,8 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    see `tests/test_e2e_service.py`. ~~**D2** — cancel E2E~~ ✅ done; see
    `tests/test_e2e_cancel.py`. ~~**D3** — reaper E2E~~ ✅ done; see
    `tests/test_e2e_reaper.py`. ~~**D4** — cache correctness~~ ✅ done; see
-   `tests/test_position_cache.py` and `docs/cache.md`. **D5** (safety review) is
-   next.
+   `tests/test_position_cache.py` and `docs/cache.md`. ~~**D5** — safety review~~
+   ✅ done; see `docs/safety-review.md`. **Phase 2 is complete.**
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

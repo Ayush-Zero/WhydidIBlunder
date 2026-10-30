@@ -2,8 +2,8 @@
 
 **Status:** accepted for v1 on 2026-10-29.
 **Scope:** the Phase 2 API and worker in `server/`; there is no frontend yet.
-**Related:** [`docs/api.md`](api.md), [`docs/storage.md`](storage.md), and
-`server/ratelimit.py`.
+**Related:** [`docs/api.md`](api.md), [`docs/storage.md`](storage.md),
+[`docs/safety-review.md`](safety-review.md), and `server/ratelimit.py`.
 
 ## The decision
 
@@ -71,7 +71,7 @@ served.
 | Keep a job running forever | Per-move engine timeout (B5), cooperative cancellation (C4), and the heartbeat-based reaper (B4) | A hard process kill is covered by the reaper, not by the timeout alone |
 | Exhaust memory with many rate-limit keys | The limiter remembers at most 10,000 clients and evicts the oldest | Eviction can reset a legitimate client's count |
 | Leak secrets through IDs, responses or logs | IDs are random and carry no payload; `/health` exposes no paths or config; `.env` is gitignored; CORS does not allow credentials | Access logs contain request paths, including job IDs and game keys; protect log access and retention |
-| SQL injection or command injection | SQL uses parameters; the engine receives only constructed FENs and UCI options (D5 will review this) | Any future path that interpolates user input into SQL or a shell would break this |
+| SQL injection or command injection | SQL uses parameters; the engine receives only constructed FENs and UCI options. Reviewed and signed off in [`docs/safety-review.md`](safety-review.md) (D5) | Any future path that interpolates user input into SQL or a shell would break this; `tests/test_safety.py` trips on a shell |
 | CSRF against job control | No cookies or ambient credentials are used; `allow_credentials=False`; job IDs are explicit capabilities | If cookie-based auth is added, CSRF protection becomes mandatory |
 | Abuse of future LLM explanations | C6 is a fixed stub today and makes no LLM call | When Phase 5 wires a real model, `POST /api/explain` will need its own quota and cost control; C7 does not cover it |
 
