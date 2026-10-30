@@ -1,8 +1,7 @@
 """Client for Chess.com's public (key-less) API.
 
 This exists so the API process and the worker talk to Chess.com in exactly one
-place, with the awkward parts already handled. The awkward parts, from
-``opencode/phase2_breakdown.md``:
+place, with the awkward parts already handled:
 
 * **Response caching.** Chess.com is public and rate-limited by goodwill, not by
   a contract. Archives and past months are immutable, so their responses are

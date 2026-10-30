@@ -4,7 +4,7 @@ Design notes
 ------------
 **Schema first.** The API and the worker are thin readers/writers; everything
 hard about this phase (cache poisoning, atomic job claims) is decided *here*, in
-the table shapes. See ``opencode/phase2_breakdown.md``.
+the table shapes.
 
 **Why SQLite.** One node, no Redis, no Postgres. WAL mode means the API process
 can read while the worker writes — the whole reason WAL is switched on rather
