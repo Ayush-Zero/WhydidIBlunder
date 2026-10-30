@@ -23,9 +23,10 @@ the PV as UCI moves — exactly what
 
 **Atomicity.** ``INSERT … ON CONFLICT DO UPDATE`` is one statement, so two
 workers analysing the same opening cannot clobber each other (openings repeat, so
-this is the common case, not the exotic one). The ``WHERE excluded.depth >=
-position_eval.depth`` guard keeps the durable half of the depth rule: a later
-*shallower* re-search can never downgrade a stored deeper result.
+this is the common case, not the exotic one). The conflict target includes
+``depth``, so a later *shallower* re-search writes a **separate row** rather than
+downgrading the deep one; the inherited lookup's ``depth >= requested`` rule is
+what declines to serve it. There is no second depth rule in this file.
 """
 
 from __future__ import annotations
@@ -106,7 +107,6 @@ class SqlitePositionCache(PositionCache):
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(fen_key, engine_version, depth, multipv) DO UPDATE
                 SET evals_json = excluded.evals_json
-              WHERE excluded.depth >= position_eval.depth
             """,
             (
                 fen_key,

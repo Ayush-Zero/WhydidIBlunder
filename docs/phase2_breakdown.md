@@ -67,7 +67,7 @@
 | **D1** | **E2E happy path** | POST a game → poll → full report (this *is* the phase's done-criterion) | ✅ Done — `tests/test_e2e_service.py` (live): recorded Chess.com fixtures + real Stockfish drive C2 → worker → C3 → C5, assert the report is valid and served verbatim, and that a second request reuses it without requeueing |
 | **D2** | Cancel E2E | Cancel mid-flight | ✅ Done — `tests/test_e2e_cancel.py` (live): a real worker is cancelled via C4 while `running`; job settles `cancelled`, partial plies remain, no report is written, and the Stockfish pid is gone |
 | **D3** | Reaper E2E | Kill worker mid-job | ✅ Done — `tests/test_e2e_reaper.py` (offline): a real helper process is killed mid-analysis; the next worker's scheduled reaper requeues the stale `running` job, completes it on attempt 2, and leaves nothing `running` |
-| **D4** | Cache correctness suite | Engine-version key, depth-≥ rule, FEN normalisation (halfmove clock), poisoning | All green; documented key definition |
+| **D4** | Cache correctness suite | Engine-version key, depth-≥ rule, FEN normalisation (halfmove clock), poisoning | ✅ Done — `tests/test_position_cache.py` (offline): the durable backend stores under the inherited `fen_key` (fullmove stripped, halfmove kept), an engine bump or key-version bump is a miss, shallow rows never satisfy deeper requests, deep rows report their true depth, duplicate stores upsert one row. Key definition documented in `docs/cache.md` |
 | **D5** | Safety review | No user input to the shell — only constructed FENs/UCI options; empty-month / bot / from-position handled | Checklist signed off in the PR |
 
 ---
@@ -130,7 +130,9 @@ A3 ─┴─ C1 ──────────── C5 ─ C6 ─ C7 ─ C8
    done; see `docs/ownership.md`. ~~**D1** — end-to-end happy path~~ ✅ done;
    see `tests/test_e2e_service.py`. ~~**D2** — cancel E2E~~ ✅ done; see
    `tests/test_e2e_cancel.py`. ~~**D3** — reaper E2E~~ ✅ done; see
-   `tests/test_e2e_reaper.py`. **D4** (cache correctness) is next.
+   `tests/test_e2e_reaper.py`. ~~**D4** — cache correctness~~ ✅ done; see
+   `tests/test_position_cache.py` and `docs/cache.md`. **D5** (safety review) is
+   next.
 
 > Milestone C needs B3 (there is nothing to poll until jobs run).
 

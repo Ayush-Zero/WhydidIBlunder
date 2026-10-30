@@ -124,8 +124,10 @@ def default_cache() -> PositionCache | None:
     cache is a correctness-bearing optimisation and should be turned on by
     intent, not inherited by accident from a fresh checkout.
 
-    The SQLite-backed implementation lands in Phase 2 B; until then the only
-    backends are in-memory (useful within one process) and disabled.
+    The SQLite-backed implementation is ``server.position_cache``, used by the
+    worker, which analyses one game per process into the shared job database.
+    This function is the CLI's in-process cache; the two share the key, the depth
+    rule and the hit semantics via :class:`analyzer.cache.PositionCache`.
     """
     if cache_dir() is None:
         return None

@@ -90,13 +90,15 @@ file.
 | Concern | How |
 |---|---|
 | concurrent writes | `INSERT … ON CONFLICT DO UPDATE` — one statement, so two workers on the same opening cannot clobber each other |
-| depth rule (durable half) | `WHERE excluded.depth >= position_eval.depth` — a late shallow re-search cannot downgrade a stored deep row |
+| depth rule | inherited: a row answers only a request at or below its depth. `depth` is part of the primary key, so a shallower re-search is a **separate row** and cannot overwrite the deep one (`tests/test_position_cache.py`) |
 | non-serialisable `Info` | projected to JSON: raw score + the side to move + PV as UCI. Rebuilt into a `PovScore` on read, so `to_mover_pov` sees what a fresh search produced |
 | enabled? | `CACHE_DIR` unset → `NullPositionCache` (a real value, not `None`) |
 
-Verified live: a depth-16 row answers a depth-12 request without the engine, a
-depth-20 request misses, a Stockfish-16 row does not match Stockfish 19, and a
-second job over the same game completes from the cache.
+Verified offline: `tests/test_position_cache.py` exercises the key through
+SQLite (normalisation, engine bump, depth-≥, MultiPV, duplicate stores, key
+version). Verified live: a depth-16 row answers a depth-12 request without the
+engine, a depth-20 request misses, a Stockfish-16 row does not match Stockfish
+19, and a second job over the same game completes from the cache.
 
 ## `read_game` is not `usable_game`
 
