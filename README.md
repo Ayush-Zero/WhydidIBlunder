@@ -20,8 +20,9 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   [`docs/safety-review.md`](docs/safety-review.md).
 - **Phase 3 - frontend:** not started.
 
-> **Phase 0 gate:** the owner still needs to agree with roughly 90% of the
-> flags on about 20 of their own games before the web UI is built.
+> **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
+> sample from about 20 games to 5 and agreed with the flags; the threshold
+> values are unchanged. Phase 3 can start.
 
 ## What works today
 

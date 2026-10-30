@@ -93,9 +93,10 @@
   not more threads.
 - [x] Safety review signed off; see `docs/safety-review.md`.
 
-> **Phase 2 is complete.** The next project gate is Phase 0's threshold
-> validation (the owner agrees with roughly 90% of the flags on about 20 of
-> their own games) before Phase 3's frontend work starts.
+> **Phase 2 is complete**, and the Phase 0 threshold gate is satisfied: on
+> 2026-10-30 the owner reduced the validation sample from about 20 games to 5
+> and signed off on the flags. Threshold values are unchanged. Phase 3's
+> frontend work can start.
 
 ---
 
