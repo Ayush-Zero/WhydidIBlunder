@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="WhydidIBlunder">
+  <rect width="64" height="64" rx="14" fill="#1f4d3a" />
+  <path
+    fill="#f7f4ea"
+    d="M32 9c-5.2 0-9.4 4.2-9.4 9.4 0 2.8 1.2 5.3 3.1 7-3.3 3.2-5.4 7.6-5.4 12.5h23.4c0-4.9-2.1-9.3-5.4-12.5 1.9-1.7 3.1-4.2 3.1-7C41.4 13.2 37.2 9 32 9Z"
+  />
+  <path fill="#f7f4ea" d="M18.5 41h27L49 53H15l3.5-12Z" />
+  <path fill="#1f4d3a" d="M24 47h16v3H24z" />
+</svg>

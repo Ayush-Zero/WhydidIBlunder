@@ -18,8 +18,8 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   correctness and the safety review) is signed off; see
   [`opencode/phase2_breakdown.md`](opencode/phase2_breakdown.md) and
   [`docs/safety-review.md`](docs/safety-review.md).
-- **Phase 3 - frontend:** in progress. A1 (the positions + phase bridge) is
-  complete; the work breakdown is
+- **Phase 3 - frontend:** in progress. A1 (the positions + phase bridge) and A2
+  (the routed Vite shell) are complete; the work breakdown is
   [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md).
 
 > **Phase 0 gate:** satisfied on 2026-10-30. The owner reduced the validation
@@ -38,6 +38,8 @@ server, not in WebAssembly, so the same code path powers the CLI and the API.
   explain placeholder.
 - A read-only position bridge that replays a stored report into per-ply FENs and
   phase labels for the review board.
+- A routed frontend shell with a same-origin dev proxy, API URL boundary and
+  offline build/test/lint scripts.
 - Per-IP rate limiting on `POST /api/analyze`.
 
 ## Quick start (Windows / PowerShell)
@@ -63,6 +65,31 @@ The API and worker are separate processes on purpose: Stockfish is CPU-bound
 and would block request handling if it ran in the API process. Scaling means
 starting more workers; the atomic claim makes that safe.
 
+## Frontend scaffold (Phase 3 A2)
+
+The React client lives in [`web/`](web/). Its dev server proxies `/api` and
+`/health` to the API, so the browser stays same-origin during local work.
+
+```powershell
+cd web
+Copy-Item .env.example .env.local   # optional; the defaults match the API above
+npm install
+npm run dev                         # http://localhost:5173
+```
+
+Run the API (and, for analysis, the worker) in the other terminals. The frontend
+scripts are:
+
+```powershell
+npm test        # Vitest, offline
+npm run lint    # oxlint
+npm run build   # type-check + production bundle
+```
+
+For a split deployment, set `VITE_API_BASE_URL` to the API's absolute base URL.
+The default `/api` assumes the built `dist/` is served from the API origin. See
+[`web/README.md`](web/README.md) for the details.
+
 ## Tests
 
 The default suite is offline - no network and no engine:
@@ -81,6 +108,15 @@ Remove-Item Env:RUN_LIVE_TESTS
 
 See [`docs/testing.md`](docs/testing.md) for what each layer protects.
 
+Frontend tests are offline too:
+
+```powershell
+cd web
+npm test
+npm run lint
+npm run build
+```
+
 ## Documentation
 
 - [`opencode/phase1_breakdown.md`](opencode/phase1_breakdown.md) - analyzer work
@@ -89,6 +125,7 @@ See [`docs/testing.md`](docs/testing.md) for what each layer protects.
   plan and current status.
 - [`opencode/phase3_breakdown.md`](opencode/phase3_breakdown.md) - frontend and
   interactive-review plan.
+- [`web/README.md`](web/README.md) - frontend scripts, dev proxy and API boundary.
 - [`docs/api.md`](docs/api.md) - endpoint contracts, defaults and error mapping.
 - [`docs/ownership.md`](docs/ownership.md) - **security, ownership and abuse
   model** (C8).

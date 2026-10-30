@@ -54,6 +54,21 @@ Remove-Item Env:RUN_LIVE_TESTS   # back to offline
 
 Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 
+## Frontend
+
+The React client's default suite is offline and does not need the API or an
+engine:
+
+```powershell
+cd web
+npm test
+npm run lint
+npm run build
+```
+
+A2 covers the routed shell, the API URL boundary and the build. The component
+and mocked-API suites grow with the screens in Phase 3.
+
 ## What the suite protects
 
 | Layer | File | Guards against |
