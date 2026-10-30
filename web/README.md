@@ -32,6 +32,13 @@ same origin as the API and leave the default in place.
 
 ## Current state
 
-Milestone A2 provides the routed shell, build/test/lint scripts and the API
-boundary. Player search, the analysis lifecycle and the review board land in the
-next milestones.
+Milestone A3 adds the typed transport client for C1-C5, positions and try; the
+fixture-tested abort/timeout handling and mapped API errors; and the shell's
+server-status indicator, error boundary and shared loading/empty/error states.
+Player search, the analysis lifecycle and the review board land in the next
+milestones.
+
+The client is in `src/api/`: `types.ts` mirrors the wire contract, `endpoints.ts`
+builds the requests, `http.ts` owns fetch/timeout/error mapping, and `url.ts`
+keeps opaque game keys out of raw paths. The browser still only talks to
+`/api` and `/health`.

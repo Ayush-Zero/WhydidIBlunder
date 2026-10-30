@@ -66,8 +66,10 @@ npm run lint
 npm run build
 ```
 
-A2 covers the routed shell, the API URL boundary and the build. The component
-and mocked-API suites grow with the screens in Phase 3.
+A2 covers the routed shell, the API URL boundary and the build. A3 adds the
+typed transport client, fixture-parsing and error-mapping tests, the shell error
+boundary, and shared loading/empty/error states. The component and mocked-API
+suites grow with the screens in Phase 3.
 
 ## What the suite protects
 

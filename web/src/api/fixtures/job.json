@@ -1,0 +1,30 @@
+{
+  "job_id": "6f1c0a52-8a4a-4d17-b138-0a2c48c4a7d9",
+  "status": "running",
+  "game_key": "chesscom:7515eb15-befd-11f1-8dbb-feb0c301000f",
+  "user_color": "white",
+  "progress_ply": 1,
+  "moves": [
+    {
+      "ply": 1,
+      "move_number": 1,
+      "side": "white",
+      "san": "e4",
+      "best_san": "e4",
+      "pv_san": ["e4", "e5", "Nf3"],
+      "eval_before_cp": 30,
+      "eval_after_cp": 28,
+      "eval_before_win_pct": 54.2,
+      "eval_after_win_pct": 53.9,
+      "mate_before": null,
+      "mate_after": null,
+      "played_rank": 1,
+      "drop_win_pct": 0.3,
+      "classification": "ok",
+      "tags": [],
+      "suppressed": true,
+      "suppress_reason": "best move"
+    }
+  ],
+  "error": null
+}

@@ -9,13 +9,13 @@ export function HomePage() {
       </p>
 
       <aside className="next-step" aria-labelledby="next-step-title">
-        <p className="next-step-label">Phase 3 · scaffold</p>
+        <p className="next-step-label">Phase 3 · app shell</p>
         <h2 id="next-step-title">
           Player search and game discovery are next.
         </h2>
         <p>
-          The routed shell, dev proxy and production build are ready. The
-          analysis flow will land here.
+          The typed API boundary, server status and shared loading, empty and
+          error states are ready. The analysis flow will land here.
         </p>
       </aside>
     </section>

@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom'
+import { ServerStatus } from './ServerStatus'
 
 export function AppShell() {
   return (
@@ -14,7 +15,10 @@ export function AppShell() {
           </span>
           <span>WhydidIBlunder</span>
         </Link>
-        <span className="app-kicker">Server-side Stockfish</span>
+        <div className="app-header-meta">
+          <ServerStatus />
+          <span className="app-kicker">Server-side Stockfish</span>
+        </div>
       </header>
 
       <main id="main" className="app-main" tabIndex={-1}>

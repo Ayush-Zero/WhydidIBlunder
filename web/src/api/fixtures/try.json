@@ -1,0 +1,11 @@
+{
+  "legal": true,
+  "accepted": false,
+  "classification": "mistake",
+  "drop_win_pct": 23.4,
+  "eval_after_cp": -120,
+  "best_san": "d4",
+  "pv_san": ["d4", "d5", "exd5"],
+  "threshold_win_pct": 10,
+  "reason": "23.4 win%-points worse than the position before the move"
+}

@@ -1,0 +1,56 @@
+{
+  "username": "beast-ash",
+  "count": 2,
+  "games": [
+    {
+      "game_key": "chesscom:7515eb15-befd-11f1-8dbb-feb0c301000f",
+      "url": "https://www.chess.com/game/live/184741950578",
+      "white": {
+        "username": "BEAST-ASH",
+        "rating": 1171,
+        "result": "win",
+        "title": null
+      },
+      "black": {
+        "username": "Gopinath_27",
+        "rating": 1146,
+        "result": "checkmated",
+        "title": null
+      },
+      "result": "1-0",
+      "time_class": "rapid",
+      "time_control": "600",
+      "rated": true,
+      "rules": "chess",
+      "end_time": 1791013370,
+      "is_bot": false,
+      "from_position": false,
+      "user_color": "white"
+    },
+    {
+      "game_key": "chesscom:391fb071-befc-11f1-b809-a9c32901000f",
+      "url": "https://www.chess.com/game/live/184741678854",
+      "white": {
+        "username": "Guigbab",
+        "rating": 1114,
+        "result": "agreed",
+        "title": null
+      },
+      "black": {
+        "username": "BEAST-ASH",
+        "rating": 1153,
+        "result": "win",
+        "title": null
+      },
+      "result": "1/2-1/2",
+      "time_class": "rapid",
+      "time_control": "600",
+      "rated": true,
+      "rules": "chess",
+      "end_time": 1791013107,
+      "is_bot": false,
+      "from_position": false,
+      "user_color": "black"
+    }
+  ]
+}
