@@ -23,6 +23,14 @@ returns the requested number of lines, and `analyze_game` produces a
 schema-valid, JSON-serialisable report. It never asserts *which* moves are
 flagged.
 
+`tests/test_e2e_service.py` is also `live` and is the Phase 2 **D1**
+done-criterion: it drives `POST /api/analyze` over recorded Chess.com fixtures,
+runs the real worker (and therefore real Stockfish) to drain the job, polls
+`GET /api/jobs/{id}`, then fetches the stored report from
+`GET /api/games/{game_key}/report`. It asserts the full contract — the report
+validates against the frozen schema, is served verbatim, and a second request
+reuses it without requeueing — but again not which moves are flagged.
+
 ```powershell
 $env:RUN_LIVE_TESTS='1'
 .\.venv\Scripts\python.exe -m pytest -m live
@@ -47,6 +55,7 @@ Requires Stockfish at `STOCKFISH_PATH` (`C:\Tools\stockfish\stockfish.exe`).
 | Frozen fixture, self-consistency | `tests/test_report.py` | a report that no longer recomputes from its own evals |
 | Frozen fixture, exact flags | `tests/test_golden_game.py` | a *silently* different verdict on the sample game |
 | Live smoke (opt-in) | `tests/test_live_engine.py` | the engine plumbing breaking (start, score, valid report) — never the classification |
+| Service E2E (opt-in) | `tests/test_e2e_service.py` | the C2 → worker → C3 → C5 spine breaking: a job that never runs, a report that does not validate or is reshaped by the API, or a finished report being requeued |
 
 ## The golden fixture
 
