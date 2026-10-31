@@ -15,6 +15,7 @@ import { SearchForm } from '../components/SearchForm'
 import { GameCard } from '../components/GameCard'
 import {
   analysisPath,
+  reportPath,
   type AnalysisLocationState,
 } from '../lib/analysis'
 import {
@@ -52,8 +53,6 @@ export function PlayerPage() {
   const [retryToken, setRetryToken] = useState(0)
   const [startingGameKey, setStartingGameKey] = useState<string | null>(null)
   const [startError, setStartError] = useState<unknown | null>(null)
-  const [storedReportGame, setStoredReportGame] =
-    useState<GameSummary | null>(null)
 
   const usernameIsValid = USERNAME_PATTERN.test(username)
   const requestKey = [
@@ -137,7 +136,6 @@ export function PlayerPage() {
   function clearAnalysisNotice() {
     setStartingGameKey(null)
     setStartError(null)
-    setStoredReportGame(null)
   }
 
   async function handleAnalyze(game: GameSummary) {
@@ -145,7 +143,6 @@ export function PlayerPage() {
 
     setStartingGameKey(game.game_key)
     setStartError(null)
-    setStoredReportGame(null)
 
     try {
       const response = await api.analyzeGame({
@@ -165,7 +162,7 @@ export function PlayerPage() {
         return
       }
 
-      setStoredReportGame(game)
+      navigate(reportPath(username, response.game_key, response.user_color))
     } catch (error) {
       if (!isAbortError(error)) setStartError(error)
     } finally {
@@ -237,26 +234,6 @@ export function PlayerPage() {
               </p>
             ) : null}
           </div>
-
-          {storedReportGame ? (
-            <aside className="inline-notice" role="status">
-              <p>
-                A stored report already exists for{' '}
-                <strong>
-                  {storedReportGame.white.username} vs{' '}
-                  {storedReportGame.black.username}
-                </strong>
-                . The move-by-move review screen is not connected yet.
-              </p>
-              <button
-                className="button button--secondary button--small"
-                type="button"
-                onClick={() => setStoredReportGame(null)}
-              >
-                Dismiss
-              </button>
-            </aside>
-          ) : null}
 
           {startError ? (
             <AnalysisStartError

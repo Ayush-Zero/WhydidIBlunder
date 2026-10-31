@@ -4,6 +4,7 @@ import { AnalysisPage } from './pages/AnalysisPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PlayerPage } from './pages/PlayerPage'
+import { ReportPage } from './pages/ReportPage'
 import './App.css'
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           path="player/:username/analysis/:jobId"
           element={<AnalysisPage />}
         />
+        <Route path="player/:username/report" element={<ReportPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

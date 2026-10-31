@@ -754,7 +754,8 @@
 
 /* --- Analysis lifecycle -------------------------------------------------- */
 
-.analysis-page {
+.analysis-page,
+.report-page {
   max-width: 52rem;
 }
 

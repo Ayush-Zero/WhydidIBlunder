@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   MemoryRouter,
@@ -46,6 +46,7 @@ function LocationProbe() {
   return (
     <div>
       <p data-testid="location-path">{location.pathname}</p>
+      <p data-testid="location-search">{location.search}</p>
       <p data-testid="location-state">{JSON.stringify(location.state)}</p>
     </div>
   )
@@ -60,6 +61,7 @@ function renderPlayerWithAnalysis(username: string, search = '') {
           path="/player/:username/analysis/:jobId"
           element={<LocationProbe />}
         />
+        <Route path="/player/:username/report" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -339,12 +341,21 @@ describe('player discovery', () => {
     await waitFor(() => expect(analyze).toBeEnabled())
   })
 
-  it('explains when C2 returns a stored report instead of a job', async () => {
+  it('opens the durable report URL when C2 returns a stored report', async () => {
     const game = gamesFixture.games[0]
     respond(gamesFixture)
-    respond({ ...analyzeFixture, job_id: null, status: 'done' }, 200)
+    respond(
+      {
+        ...analyzeFixture,
+        job_id: null,
+        status: 'done',
+        game_key: game.game_key,
+        user_color: 'white',
+      },
+      200,
+    )
 
-    renderPlayerPage('beast-ash')
+    renderPlayerWithAnalysis('beast-ash')
 
     const user = userEvent.setup()
     const [analyze] = await screen.findAllByRole('button', {
@@ -352,20 +363,19 @@ describe('player discovery', () => {
     })
     await user.click(analyze)
 
-    const notice = (
-      await screen.findByText(/a stored report already exists for/i)
-    ).closest('aside')
-    expect(notice).not.toBeNull()
-    expect(
-      within(notice as HTMLElement).getByText(
-        new RegExp(`${game.white.username}\\s+vs\\s+${game.black.username}`, 'i'),
+    await waitFor(() =>
+      expect(screen.getByTestId('location-path')).toHaveTextContent(
+        '/player/beast-ash/report',
       ),
-    ).toBeInTheDocument()
+    )
+
+    const search = screen.getByTestId('location-search').textContent ?? ''
+    expect(search).toContain('game_key=chesscom%3A')
+    const params = new URLSearchParams(search)
+    expect(params.get('game_key')).toBe(game.game_key)
+    expect(params.get('user_color')).toBe('white')
     expect(
-      screen.getByText(/move-by-move review screen is not connected yet/i),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByTestId('location-path'),
+      screen.queryByText(/review screen is not connected yet/i),
     ).not.toBeInTheDocument()
   })
 })

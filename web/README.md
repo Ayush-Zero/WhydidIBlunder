@@ -41,8 +41,21 @@ discovery states. Milestone B2 adds the analysis lifecycle: Analyze starts or
 resumes a C2 job, `/player/:username/analysis/:jobId` polls C3 serially, cancel
 uses C4 once, and the page handles done, failed, cancelled, stale polls,
 unmounts and recoverable errors while preserving the saved prefix. Reloading a
-job URL resumes polling, and Back to games keeps the discovery filters; the
-move-by-move report board is the next milestone.
+job URL resumes polling, and Back to games keeps the discovery filters.
+
+Milestone B3 adds the durable report URL
+`/player/:username/report?game_key=…&user_color=…`. Opaque keys stay in the
+query string, a direct visit reloads the same report, and a stored report
+returned with `job_id: null` navigates there instead of ending in a notice.
+That navigation pushes a history entry, so browser back/forward moves between
+discovery and the report. Incomplete links and expired reports show a recovery
+path.
+
+The review screen is board-first: a selected-ply board, a grouped move list,
+White-POV evaluations, `Moves` / `Mistakes` tabs, arrows and best-line
+click-through. Flagged user moves can open Try again, which asks the server to
+grade one legal candidate move; the browser never runs an engine or stores a
+classification.
 
 The client is in `src/api/`: `types.ts` mirrors the wire contract, `endpoints.ts`
 builds the requests, `http.ts` owns fetch/timeout/error mapping, and `url.ts`
