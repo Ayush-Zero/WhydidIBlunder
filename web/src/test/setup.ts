@@ -1,5 +1,26 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
+
+/**
+ * react-chessboard renders a full SVG board and is disproportionate in jsdom.
+ * Unit tests assert the wrapper's FEN contract instead; D4's Playwright run
+ * exercises the real board.
+ */
+vi.mock('react-chessboard', async () => {
+  const { createElement } = await import('react')
+  return {
+    Chessboard: ({
+      options,
+    }: {
+      options?: { position?: string; boardOrientation?: string }
+    }) =>
+      createElement('div', {
+        'data-testid': 'mock-chessboard',
+        'data-position': options?.position,
+        'data-orientation': options?.boardOrientation,
+      }),
+  }
+})
 
 afterEach(cleanup)

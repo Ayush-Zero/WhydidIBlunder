@@ -14,7 +14,7 @@ import type { JobMove } from '../api'
 import {
   ANALYSIS_POLL_INTERVAL_MS,
 } from '../hooks/useAnalysisJob'
-import { makeJob, testCancel, testJob } from '../test/handlers'
+import { makeJob, testCancel, testJob, testPositions } from '../test/handlers'
 import { server, startMockServer, stopMockServer } from '../test/server'
 import { AnalysisPage } from './AnalysisPage'
 
@@ -137,6 +137,14 @@ describe('analysis lifecycle', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/2 plies evaluated and saved/i)).toBeInTheDocument()
     expect(jobCalls).toBe(2)
+
+    // The done state mounts the C1 review, which loads the report and its
+    // positions through the same job metadata.
+    await advanceClock(10)
+    expect(screen.getByTestId('review-board')).toHaveAttribute(
+      'data-fen',
+      testPositions.starting_fen,
+    )
 
     await advanceClock(ANALYSIS_POLL_INTERVAL_MS * 3)
     expect(jobCalls).toBe(2)

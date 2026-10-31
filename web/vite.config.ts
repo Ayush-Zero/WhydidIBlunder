@@ -25,6 +25,9 @@ export default defineConfig(({ mode }) => {
       css: false,
       passWithNoTests: true,
       restoreMocks: true,
+      // jsdom + MSW + fake-timer tests can exceed the 5s default on a busy
+      // machine; a higher ceiling keeps the suite deterministic.
+      testTimeout: 15_000,
     },
   }
 })

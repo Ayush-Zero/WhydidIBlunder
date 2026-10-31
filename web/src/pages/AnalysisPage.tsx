@@ -7,6 +7,7 @@ import {
 } from '../api'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
+import { Review } from '../components/Review'
 import {
   useAnalysisJob,
   type AnalysisPhase,
@@ -140,6 +141,14 @@ export function AnalysisPage() {
               )}
             </div>
           </section>
+        ) : null}
+
+        {job && phase === 'done' ? (
+          <Review
+            gameKey={job.game_key}
+            userColor={job.user_color}
+            gamesPath={gamesPath}
+          />
         ) : null}
       </div>
     </section>
