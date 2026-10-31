@@ -66,6 +66,9 @@ opencode/
 # ---- Local planning notes (not published) ----
 plan.md
 
+# ---- Local OpenCode config / skills ----
+.opencode/
+
 # ---- IDE / editor ----
 .vscode/
 !.vscode/extensions.json
