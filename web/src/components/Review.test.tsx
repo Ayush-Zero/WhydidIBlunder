@@ -10,7 +10,7 @@ import {
   it,
 } from 'vitest'
 import type { GameReport } from '../api'
-import { testPositions, testReport } from '../test/handlers'
+import { testPositions, testReport, testTry } from '../test/handlers'
 import { server, startMockServer, stopMockServer } from '../test/server'
 import { Review } from './Review'
 
@@ -37,6 +37,22 @@ function renderReview() {
 async function openMistakesPanel() {
   fireEvent.click(await screen.findByRole('tab', { name: /^Mistakes/ }))
   return screen.findByRole('region', { name: /your mistakes/i })
+}
+
+async function openTryAgain() {
+  const panel = await openMistakesPanel()
+  const list = within(panel).getByRole('list', { name: /flagged moves/i })
+  fireEvent.click(within(list).getByRole('button', { name: /Bd6/ }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+  return screen.findByRole('region', { name: /try again/i })
+}
+
+function tryRequestBody(body: unknown) {
+  return body as {
+    user_color: string
+    ply: number
+    move_san: string
+  }
 }
 
 describe('review', () => {
@@ -430,5 +446,212 @@ describe('review', () => {
         name: /board data does not match/i,
       }),
     ).toBeInTheDocument()
+  })
+
+  it('shows try again only for the user’s flagged plies', async () => {
+    renderReview()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /White move 1, e4/ }),
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Try again' }),
+    ).not.toBeInTheDocument()
+
+    const panel = await openMistakesPanel()
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+    fireEvent.click(within(list).getByRole('button', { name: /Bd6/ }))
+
+    expect(
+      screen.getByRole('button', { name: 'Try again' }),
+    ).toBeInTheDocument()
+  })
+
+  it('offers only legal moves and blocks an illegal candidate', async () => {
+    let tryCalls = 0
+    server.use(
+      http.post('*/api/games/*/try', () => {
+        tryCalls += 1
+        return HttpResponse.json(testTry)
+      }),
+    )
+
+    renderReview()
+    const panel = await openTryAgain()
+    const select = within(panel).getByLabelText('Your move')
+    const submit = within(panel).getByRole('button', { name: 'Check move' })
+
+    expect(submit).toBeDisabled()
+    expect(
+      within(select).getByRole('option', { name: 'd4' }),
+    ).toBeInTheDocument()
+    expect(
+      within(select).getByRole('option', { name: 'Kg2' }),
+    ).toBeInTheDocument()
+    expect(
+      within(select).queryByRole('option', { name: 'Qh5' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.change(select, { target: { value: 'Qh5' } })
+    expect(select).toHaveValue('')
+    expect(submit).toBeDisabled()
+
+    const form = submit.closest('form')
+    expect(form).not.toBeNull()
+    fireEvent.submit(form as HTMLFormElement)
+    expect(tryCalls).toBe(0)
+  })
+
+  it('accepts a sub-threshold non-best move and shows the best line', async () => {
+    let body: unknown = null
+    server.use(
+      http.post('*/api/games/*/try', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({
+          ...testTry,
+          accepted: true,
+          classification: 'ok',
+          drop_win_pct: 0.2,
+          reason: 'Within the inaccuracy threshold.',
+        })
+      }),
+    )
+
+    renderReview()
+    const panel = await openTryAgain()
+    fireEvent.change(within(panel).getByLabelText('Your move'), {
+      target: { value: 'Kg2' },
+    })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check move' }))
+
+    expect(await within(panel).findByText('Accepted')).toBeInTheDocument()
+    expect(within(panel).getByText('0.2 win%-points')).toBeInTheDocument()
+    expect(within(panel).getByText('Best move')).toBeInTheDocument()
+    expect(within(panel).getByText('d4')).toBeInTheDocument()
+    expect(within(panel).getByText('Best line')).toBeInTheDocument()
+    expect(within(panel).getByText('d4 d5 exd5')).toBeInTheDocument()
+    expect(tryRequestBody(body)).toEqual({
+      user_color: 'white',
+      ply: 35,
+      move_san: 'Kg2',
+    })
+    expect(screen.getByTestId('review-board')).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
+
+    fireEvent.click(
+      within(panel).getByRole('button', { name: 'Try another move' }),
+    )
+    expect(within(panel).getByLabelText('Your move')).toHaveValue('')
+    expect(within(panel).queryByText('Accepted')).not.toBeInTheDocument()
+  })
+
+  it('accepts the exact report best move', async () => {
+    let body: unknown = null
+    server.use(
+      http.post('*/api/games/*/try', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({
+          ...testTry,
+          accepted: true,
+          classification: 'ok',
+          drop_win_pct: 0,
+          reason: 'Matches the report’s best move.',
+        })
+      }),
+    )
+
+    renderReview()
+    const panel = await openTryAgain()
+    fireEvent.change(within(panel).getByLabelText('Your move'), {
+      target: { value: 'd4' },
+    })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check move' }))
+
+    expect(await within(panel).findByText('Accepted')).toBeInTheDocument()
+    expect(within(panel).getByText('0.0 win%-points')).toBeInTheDocument()
+    expect(tryRequestBody(body)).toEqual({
+      user_color: 'white',
+      ply: 35,
+      move_san: 'd4',
+    })
+  })
+
+  it('shows a rejected try with its drop, classification, and best line', async () => {
+    renderReview()
+    const panel = await openTryAgain()
+    fireEvent.change(within(panel).getByLabelText('Your move'), {
+      target: { value: 'Kg2' },
+    })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check move' }))
+
+    expect(await within(panel).findByText('Rejected')).toBeInTheDocument()
+    expect(within(panel).getByText(/Mistake by the report/)).toBeInTheDocument()
+    expect(within(panel).getByText('23.4 win%-points')).toBeInTheDocument()
+    expect(within(panel).getByText('Best move')).toBeInTheDocument()
+    expect(within(panel).getByText('d4')).toBeInTheDocument()
+    expect(within(panel).getByText('Best line')).toBeInTheDocument()
+    expect(within(panel).getByText('d4 d5 exd5')).toBeInTheDocument()
+    expect(
+      within(panel).getByText(
+        '23.4 win%-points worse than the position before the move',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('resets the try without changing the report', async () => {
+    renderReview()
+    const panel = await openTryAgain()
+    fireEvent.change(within(panel).getByLabelText('Your move'), {
+      target: { value: 'Kg2' },
+    })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check move' }))
+    expect(await within(panel).findByText('Rejected')).toBeInTheDocument()
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reset' }))
+
+    expect(
+      screen.queryByRole('region', { name: /try again/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Try again' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('review-board')).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
+    expect(screen.getByText('87.9%')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Moves' }))
+    expect(
+      screen.getByRole('button', { name: /White move 23, Be7#/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the report usable when the try endpoint fails', async () => {
+    server.use(
+      http.post('*/api/games/*/try', () =>
+        HttpResponse.json({ detail: 'the engine is busy' }, { status: 503 }),
+      ),
+    )
+
+    renderReview()
+    const panel = await openTryAgain()
+    fireEvent.change(within(panel).getByLabelText('Your move'), {
+      target: { value: 'd4' },
+    })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Check move' }))
+
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      /analysis service is not ready/i,
+    )
+    expect(
+      await within(panel).findByRole('button', { name: 'Check move' }),
+    ).toBeEnabled()
+    expect(screen.getByTestId('review-board')).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
   })
 })

@@ -12,6 +12,7 @@ import { ReviewBoard } from './ReviewBoard'
 import { ReviewNav } from './ReviewNav'
 import { ReviewPanels } from './ReviewPanels'
 import { ReviewSummary } from './ReviewSummary'
+import { TryAgain } from './TryAgain'
 
 interface ReviewProps {
   gameKey: string
@@ -35,10 +36,22 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
   )
   const [selectedPly, setSelectedPly] = useState(1)
   const [pvIndex, setPvIndex] = useState(0)
+  const [tryPly, setTryPly] = useState<number | null>(null)
 
   function selectPly(ply: number) {
     setSelectedPly(ply)
     setPvIndex(0)
+    setTryPly(null)
+  }
+
+  function toggleTryAgain(ply: number) {
+    setPvIndex(0)
+    setTryPly((current) => (current === ply ? null : ply))
+  }
+
+  function resetTryAgain() {
+    setPvIndex(0)
+    setTryPly(null)
   }
 
   if (phase === 'loading') {
@@ -113,6 +126,7 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
     (candidate) => candidate.classification !== 'ok',
   )
   const phaseCounts = phaseBreakdown(userMoves, positions.positions)
+  const tryable = move.side === userColor && move.classification !== 'ok'
 
   return (
     <section className="review" aria-labelledby="review-title">
@@ -165,15 +179,38 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
         </div>
 
         <div className="review-side">
-          <p className="review-move-label" role="status">
-            {move.move_number}
-            {move.side === 'white' ? '.' : '…'} {move.san}
-          </p>
+          <div className="review-move-heading">
+            <p className="review-move-label" role="status">
+              {move.move_number}
+              {move.side === 'white' ? '.' : '…'} {move.san}
+            </p>
+            {tryable ? (
+              <button
+                className="button button--secondary button--small"
+                type="button"
+                aria-expanded={tryPly === activePly}
+                aria-controls="try-again-panel"
+                onClick={() => toggleTryAgain(activePly)}
+              >
+                {tryPly === activePly ? 'Close try again' : 'Try again'}
+              </button>
+            ) : null}
+          </div>
           <ReviewNav
             moves={report.moves}
             selectedPly={activePly}
             onSelect={selectPly}
           />
+          {tryPly === activePly && tryable ? (
+            <TryAgain
+              key={activePly}
+              gameKey={gameKey}
+              userColor={userColor}
+              move={move}
+              fenBefore={position.fen_before}
+              onReset={resetTryAgain}
+            />
+          ) : null}
           <ReviewPanels
             moves={report.moves}
             flaggedMoves={flaggedMoves}

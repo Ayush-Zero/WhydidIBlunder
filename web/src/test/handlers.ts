@@ -5,6 +5,7 @@ import gamesFixture from '../api/fixtures/games.json'
 import jobFixture from '../api/fixtures/job.json'
 import positionsFixture from '../api/fixtures/positions.json'
 import reportFixture from '../api/fixtures/report.json'
+import tryFixture from '../api/fixtures/try.json'
 import type {
   AnalyzeResponse,
   CancelResponse,
@@ -13,6 +14,7 @@ import type {
   GameReport,
   HealthResponse,
   JobStatus,
+  TryResponse,
 } from '../api'
 
 export const testJob = jobFixture as unknown as JobStatus
@@ -21,6 +23,7 @@ export const testCancel = cancelFixture as unknown as CancelResponse
 export const testGames = gamesFixture as unknown as GameList
 export const testReport = reportFixture as unknown as GameReport
 export const testPositions = positionsFixture as unknown as GamePositions
+export const testTry = tryFixture as unknown as TryResponse
 export const testHealth: HealthResponse = {
   status: 'ok',
   database: 'ok',
@@ -55,4 +58,5 @@ export const defaultHandlers = [
   http.get('*/api/games/*/positions', () =>
     HttpResponse.json(testPositions),
   ),
+  http.post('*/api/games/*/try', () => HttpResponse.json(testTry)),
 ]

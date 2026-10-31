@@ -3,6 +3,7 @@ import type { MoveEvaluation, ReviewPosition } from '../api'
 import {
   formatEval,
   groupMoves,
+  legalSanMoves,
   moveOverlay,
   phaseBreakdown,
   stillAheadNote,
@@ -278,6 +279,24 @@ describe('stillAheadNote', () => {
         }),
       ),
     ).toBeNull()
+  })
+})
+
+describe('legalSanMoves', () => {
+  const bd6Fen =
+    'rnb1k1nr/p2p1ppp/8/1pbN1N1P/4PBP1/3P1Q2/PqP5/R4KR1 w kq - 0 18'
+
+  it('lists legal SAN moves and excludes illegal candidates', () => {
+    const moves = legalSanMoves(bd6Fen)
+
+    expect(moves).toContain('d4')
+    expect(moves).toContain('Kg2')
+    expect(moves).not.toContain('Qh5')
+    expect(moves).toEqual([...moves].sort())
+  })
+
+  it('returns an empty list when the position is unreadable', () => {
+    expect(legalSanMoves('not a FEN')).toEqual([])
   })
 })
 

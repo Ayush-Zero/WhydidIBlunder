@@ -128,6 +128,21 @@ const PLAYED_ARROW_COLOR = 'rgba(192, 57, 43, 0.85)'
 const BEST_ARROW_COLOR = 'rgba(30, 132, 73, 0.85)'
 
 /**
+ * Every legal SAN move in `fen`, for the try-again candidate picker.
+ *
+ * `chess.js` blocks illegal candidates early, but the server reconstructs the
+ * position and re-validates the submitted SAN. Invalid report data yields an
+ * empty list instead of throwing.
+ */
+export function legalSanMoves(fen: string): string[] {
+  try {
+    return new Chess(fen).moves().sort()
+  } catch {
+    return []
+  }
+}
+
+/**
  * Draw the played and best moves on `fen_before`, and replay the best line.
  *
  * The report stores SAN, not squares, so `chess.js` derives the arrow ends.
