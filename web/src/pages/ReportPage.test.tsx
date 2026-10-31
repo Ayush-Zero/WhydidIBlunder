@@ -35,6 +35,34 @@ function renderReport(search = VALID_QUERY) {
 }
 
 describe('report page', () => {
+  it('shows the loading state while the report is pending', async () => {
+    let resolveReport: (response: Response) => void = () => {}
+    let markStarted: () => void = () => {}
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    server.use(
+      http.get(
+        '*/api/games/*/report',
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveReport = resolve
+            markStarted()
+          }),
+      ),
+    )
+
+    renderReport()
+    await started
+
+    expect(
+      screen.getByText(/loading the board and moves/i),
+    ).toBeInTheDocument()
+
+    resolveReport(HttpResponse.json(testReport))
+    expect(await screen.findByTestId('review-board')).toBeInTheDocument()
+  })
+
   it('loads the report from the encoded query on a direct visit', async () => {
     let requested = ''
     server.use(
@@ -59,6 +87,23 @@ describe('report page', () => {
     const url = new URL(requested)
     expect(url.pathname).toBe('/api/games/chesscom:game-1/report')
     expect(url.searchParams.get('user_color')).toBe('white')
+  })
+
+  it('shows an empty state when the report has no moves', async () => {
+    server.use(
+      http.get('*/api/games/*/report', () =>
+        HttpResponse.json({ ...testReport, moves: [] }),
+      ),
+    )
+
+    renderReport()
+
+    expect(
+      await screen.findByText(/this report has no moves to review/i),
+    ).toBeInTheDocument()
+    for (const link of screen.getAllByRole('link', { name: /back to games/i })) {
+      expect(link).toHaveAttribute('href', '/player/beast-ash')
+    }
   })
 
   it('explains an incomplete report link and offers a route back', async () => {

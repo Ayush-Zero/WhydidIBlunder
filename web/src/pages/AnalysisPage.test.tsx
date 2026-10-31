@@ -100,6 +100,39 @@ async function waitForElement<T>(
 }
 
 describe('analysis lifecycle', () => {
+  it('shows the loading state while the first job request is pending', async () => {
+    let resolveJob: (response: Response) => void = () => {}
+    let markStarted: () => void = () => {}
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    server.use(
+      http.get(
+        '*/api/jobs/job-1',
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveJob = resolve
+            markStarted()
+          }),
+      ),
+    )
+
+    renderJob()
+    await started
+
+    expect(screen.getByText(/checking the analysis/i)).toBeInTheDocument()
+
+    resolveJob(
+      HttpResponse.json(
+        makeJob({ status: 'running', progress_ply: 2, moves: [move(1, 'e4')] }),
+      ),
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: /analysing ply 2/i }),
+    ).toBeInTheDocument()
+  })
+
   it('polls running jobs until done, then stops', async () => {
     vi.useFakeTimers()
     const moves = [move(1, 'e4'), move(2, 'e5')]
