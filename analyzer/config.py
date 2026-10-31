@@ -84,3 +84,8 @@ def job_timeout_seconds() -> int:
 def reaper_interval_seconds() -> int:
     """How often the reaper runs (seconds)."""
     return _int("REAPER_INTERVAL_SECONDS", 30)
+
+
+def try_timeout_seconds() -> int:
+    """Hard timeout for one try-again evaluation (seconds)."""
+    return _int("TRY_TIMEOUT_SECONDS", 20)

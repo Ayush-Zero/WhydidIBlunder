@@ -42,11 +42,13 @@ from ipaddress import (
 __all__ = [
     "DEFAULT_RATE_LIMIT",
     "DEFAULT_TRUSTED_PROXIES",
+    "DEFAULT_TRY_RATE_LIMIT",
     "RateLimitDecision",
     "RateLimiter",
     "client_ip",
     "parse_trusted_proxies",
     "rate_limit_per_hour_from_env",
+    "rate_limit_try_per_hour_from_env",
     "trusted_proxies_from_env",
 ]
 
@@ -55,6 +57,10 @@ IPNetwork = IPv4Network | IPv6Network
 
 #: Five analyses per hour is the plan's v1 default. ``0`` disables the limit.
 DEFAULT_RATE_LIMIT = 5
+
+#: Try-again is cheaper than a whole analysis but still spends engine time, so it
+#: gets its own, larger bucket. ``0`` disables the limit.
+DEFAULT_TRY_RATE_LIMIT = 60
 
 #: Caddy on the same host connects over loopback. In Docker, set this to the
 #: proxy's network; the default deliberately does **not** trust private ranges
@@ -281,6 +287,23 @@ def rate_limit_per_hour_from_env() -> int:
         ) from exc
     if value < 0:
         raise ValueError("RATE_LIMIT_ANALYSES_PER_HOUR must be >= 0")
+    return value
+
+
+def rate_limit_try_per_hour_from_env() -> int:
+    """Read ``RATE_LIMIT_TRY_PER_HOUR``; ``0`` means disabled."""
+    raw = os.getenv(
+        "RATE_LIMIT_TRY_PER_HOUR", str(DEFAULT_TRY_RATE_LIMIT)
+    ).strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "RATE_LIMIT_TRY_PER_HOUR must be an integer, "
+            f"got {raw!r}"
+        ) from exc
+    if value < 0:
+        raise ValueError("RATE_LIMIT_TRY_PER_HOUR must be >= 0")
     return value
 
 

@@ -9,9 +9,9 @@ behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 > (ownership / abuse model) is documented in
 > [`docs/ownership.md`](ownership.md). Milestone C is complete.
 >
-> **Phase 3 A1:** `GET /api/games/{game_key}/positions` (board positions and
-> phase labels) is implemented below. The Phase 3 try-again endpoint is not
-> built yet.
+> **Phase 3:** A1 (positions and phase labels) and D1 (server-side try-again
+> grading) are implemented below. The try-again UI, browser harness and final
+> hardening notes are Milestones D2–D5.
 
 ---
 
@@ -413,6 +413,102 @@ secret; anyone who knows the key and colour can derive the positions.
 
 ---
 
+## Phase 3 D1 — `POST /api/games/{game_key}/try`
+
+Grades one candidate move against a stored report. The server reconstructs the
+position from the report's SANs, validates the candidate with python-chess, and
+searches **only the resulting position** at the report's stored depth and
+MultiPV. The report supplies the position before the move, its win probability
+and the best line; server configuration supplies the classification thresholds.
+A request cannot send a FEN, a depth, an engine path or a threshold.
+
+### Request
+
+```json
+{
+  "user_color": "white",
+  "ply": 24,
+  "move_san": "Nf3"
+}
+```
+
+`user_color` selects the stored report, `ply` selects one of that side's moves,
+and `move_san` is any **legal** SAN move in the position before that ply. The
+body is `extra="forbid"`, so an invented `fen` or `depth` field is a `422`.
+
+### Response — `200`
+
+```json
+{
+  "legal": true,
+  "accepted": false,
+  "classification": "mistake",
+  "drop_win_pct": 23.4,
+  "eval_after_cp": -120,
+  "best_san": "d4",
+  "pv_san": ["d4", "d5", "exd5"],
+  "threshold_win_pct": 10.0,
+  "reason": "23.4 win%-points worse than the position before the move"
+}
+```
+
+Field notes:
+
+- **`legal` is always `true` on a `200`.** An illegal or ambiguous candidate is
+  a `422`, never a result with `legal: false`.
+- **The acceptance ladder is the analyzer's existing precedence.** A forced
+  move passes; the report's exact best move passes; a non-best move whose drop is
+  at most `SUPPRESS_WIN_PTS` (default `0.2`) passes; otherwise the configured
+  inaccuracy/mistake/blunder thresholds decide. `accepted` is true exactly when
+  the resulting `classification` is `ok`.
+- **`drop_win_pct` is `report.eval_before_win_pct − win_pct(eval_after_cp)`**, in
+  win%-points. Both sides of that subtraction are from the **mover's** point of
+  view. `eval_after_cp` is the mover's after-eval, not White's.
+- **`threshold_win_pct` is the inaccuracy threshold**, the boundary between
+  `ok`/accepted and `inaccuracy`/rejected. Other thresholds are configured but
+  not repeated in the response.
+- **The best line comes from the stored report**, not a second search of the
+  before-position. That is deliberate: it keeps try-again to one new search and
+  keeps the comparison consistent with the report. Engine drift between the
+  report and the current binary is accepted and documented in the breakdown.
+- **The search uses the report's depth/MultiPV**, even if the server's current
+  analysis config has changed. The durable `position_eval` cache is consulted
+  before the search and filled after it.
+- **The after-eval is cached under the current engine id**, so a binary upgrade
+  cannot silently reuse an old score.
+
+### Errors
+
+| Status | When |
+|---|---|
+| `404` | No report for this `(game_key, user_color)`. |
+| `409` | The stored report exists but cannot supply a baseline (invalid JSON, unplayable SAN, missing best line, or missing engine depth/MultiPV). |
+| `422` | Bad `ply`, the ply belongs to the other colour, an illegal/ambiguous candidate SAN, or an invalid body. |
+| `429` | The separate try-again per-IP limit was exceeded. Includes `Retry-After` and the `X-RateLimit-*` headers. |
+| `503` | The database is not ready, another try evaluation holds the single engine slot, the engine timed out, or the engine failed. |
+
+### Engine lifecycle and limits
+
+The API process, not the worker, owns this engine call. To keep it from becoming
+an unbounded second worker:
+
+- **One concurrent try evaluation per API process.** The slot is non-blocking;
+  a second request gets a truthful `503` rather than queuing behind an unbounded
+  search.
+- **A hard timeout** from `TRY_TIMEOUT_SECONDS` (default `20`). A timed-out
+  search closes the engine and returns `503`.
+- **A separate per-IP bucket** from `RATE_LIMIT_TRY_PER_HOUR` (default `60`).
+  Only requests that pass report/ply/SAN validation consume it; malformed bodies
+  never reach the endpoint, and illegal moves or unknown reports spend no engine
+  time. See C7 below for the shared headers and proxy rules.
+- **CPU contention with the worker is expected.** The try slot limits *this API
+  process*; it cannot reserve CPU away from another process on the host.
+
+This is the same public game data as C5/A1. There is no auth and no new secret;
+anyone who knows the key and colour can grade candidates against that report.
+
+---
+
 ## C6 — `POST /api/explain` (stub)
 
 Returns a fixed placeholder. The route exists so the frontend can wire the call
@@ -456,18 +552,24 @@ calls here.
 
 ---
 
-## C7 — rate limiting on `POST /api/analyze`
+## C7 — rate limiting on `POST /api/analyze` and `POST .../try`
 
 `POST /api/analyze` is limited to **5 requests per client IP per hour** by
-default. The request that would exceed the limit is a `429`. The limiter runs
-before the Chess.com lookup, so an over-limit caller cannot spend upstream
-requests or Stockfish time. No other endpoint is limited.
+default. `POST /api/games/{game_key}/try` has its **own** bucket, default **60**
+per client IP per hour; the two limits do not share counters. The request that
+would exceed its bucket is a `429` with `Retry-After`.
+
+The analysis limiter runs before the Chess.com lookup, so an over-limit caller
+cannot spend upstream requests or Stockfish time. The try limiter runs after the
+cheap report/ply/SAN validation, so illegal candidates and unknown reports do
+not consume the try bucket and still cannot reach the engine.
 
 ### Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `RATE_LIMIT_ANALYSES_PER_HOUR` | `5` | Requests per IP per hour. `0` disables. |
+| `RATE_LIMIT_ANALYSES_PER_HOUR` | `5` | Analysis requests per IP per hour. `0` disables. |
+| `RATE_LIMIT_TRY_PER_HOUR` | `60` | Try-again requests per IP per hour. `0` disables. |
 | `TRUSTED_PROXY_IPS` | `127.0.0.1,::1` | Peers whose `X-Forwarded-For` is trusted. |
 
 The window is sliding, not a fixed hourly bucket: a request expires exactly one
@@ -488,10 +590,16 @@ Every allowed `200`/`202` response carries:
 | `X-RateLimit-Reset` | Seconds until the oldest request expires. |
 
 A denied request is `429` with `Retry-After` (seconds) and the same
-`X-RateLimit-*` headers:
+`X-RateLimit-*` headers. The analysis detail is:
 
 ```json
 {"detail": "rate limit exceeded; try again later"}
+```
+
+The try-again detail is:
+
+```json
+{"detail": "try-again rate limit exceeded; try again later"}
 ```
 
 ### What counts
@@ -500,8 +608,16 @@ Every analyze request with a valid body counts, including one that reuses a
 stored report, returns `404` for an unknown game, or fails upstream. Those all
 consume API capacity, and counting them keeps the rule simple. A body rejected
 by validation (`422`) is not counted: FastAPI rejects it before the limiter
-runs. The game list, polling, cancel, report, explain and `/health` are never
-counted.
+runs.
+
+For try-again, a request counts only after the report exists, the ply belongs to
+the requested colour, and the candidate SAN is legal. Unknown reports, wrong-side
+plies and illegal candidates are `4xx` before the limiter and spend no engine
+time. A valid try that finds the engine busy or times out still consumed its
+bucket, because it is a genuine engine-bound request.
+
+The game list, polling, cancel, report, positions, explain and `/health` are
+never counted.
 
 ### X-Forwarded-For
 
@@ -522,9 +638,10 @@ all callers share Caddy's bucket, which over-limits rather than bypasses.
 
 ## Not here yet
 
-No endpoint remains. Milestone C is complete; C8's ownership and abuse model is
-documented in [`docs/ownership.md`](ownership.md). Milestone D (end-to-end
-verification and hardening) is next.
+No Phase 3 endpoint remains. Milestone C is complete; C8's ownership and abuse
+model is documented in [`docs/ownership.md`](ownership.md). Milestone D's
+frontend try-again UI, browser harness and final hardening notes are still in
+progress.
 
 The breakdown writes `game_uuid` for C2/C5; the identifier is **`game_key`**
 for the reason above — not every game has a `uuid`, and the database is keyed on

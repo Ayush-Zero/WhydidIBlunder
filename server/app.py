@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 import time
 import uuid
 from collections.abc import Callable
@@ -30,6 +31,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from analyzer.cache import PositionCache
 from server import db
 from server.api import api_router
 from server.chesscom import ChessComClient, cache_dir_from_env
@@ -38,8 +40,11 @@ from server.ratelimit import (
     RateLimiter,
     parse_trusted_proxies,
     rate_limit_per_hour_from_env,
+    rate_limit_try_per_hour_from_env,
     trusted_proxies_from_env,
 )
+from server.try_grader import TryGrader, default_engine_factory
+from server.worker import default_cache_for
 
 __all__ = ["create_app", "cors_origins"]
 
@@ -67,6 +72,10 @@ def create_app(
     chesscom_client: ChessComClient | None = None,
     rate_limiter: RateLimiter | None = None,
     trusted_proxies: str | None = None,
+    try_rate_limiter: RateLimiter | None = None,
+    try_engine_factory: Callable[[], object] | None = None,
+    try_cache_factory: Callable[[sqlite3.Connection], PositionCache] | None = None,
+    try_timeout_seconds: float | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -89,6 +98,14 @@ def create_app(
     trusted_proxies:
         Comma-separated IPs/CIDRs allowed to set ``X-Forwarded-For``. ``None``
         reads ``TRUSTED_PROXY_IPS`` (loopback by default).
+    try_rate_limiter:
+        Separate per-IP bucket for the try-again endpoint. ``None`` builds one
+        from ``RATE_LIMIT_TRY_PER_HOUR``; ``RateLimiter(limit=0)`` disables it.
+    try_engine_factory / try_cache_factory / try_timeout_seconds:
+        Test seams for the engine-in-API grader. Production leaves them unset:
+        the factory uses Stockfish from config, the cache is the worker's
+        durable ``position_eval`` cache, and the timeout comes from
+        ``TRY_TIMEOUT_SECONDS``.
     """
     if configure_logging_now:
         configure_logging()
@@ -102,6 +119,16 @@ def create_app(
         rate_limiter
         if rate_limiter is not None
         else RateLimiter(limit=rate_limit_per_hour_from_env())
+    )
+    try_limiter = (
+        try_rate_limiter
+        if try_rate_limiter is not None
+        else RateLimiter(limit=rate_limit_try_per_hour_from_env())
+    )
+    grader = TryGrader(
+        engine_factory=try_engine_factory or default_engine_factory,
+        cache_factory=try_cache_factory or default_cache_for,
+        timeout_seconds=try_timeout_seconds,
     )
     proxies = (
         trusted_proxies_from_env()
@@ -134,6 +161,8 @@ def create_app(
     # C7: the limiter and the proxy trust list are process-wide facts, like the
     # client. Tests inject both; production builds them from env.
     app.state.rate_limiter = limiter
+    app.state.try_rate_limiter = try_limiter
+    app.state.try_grader = grader
     app.state.trusted_proxies = proxies
 
     app.add_middleware(

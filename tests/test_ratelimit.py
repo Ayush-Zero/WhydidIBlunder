@@ -16,10 +16,12 @@ import pytest
 
 from server.ratelimit import (
     DEFAULT_RATE_LIMIT,
+    DEFAULT_TRY_RATE_LIMIT,
     RateLimiter,
     client_ip,
     parse_trusted_proxies,
     rate_limit_per_hour_from_env,
+    rate_limit_try_per_hour_from_env,
     trusted_proxies_from_env,
 )
 
@@ -242,6 +244,25 @@ def test_an_invalid_rate_limit_is_rejected(monkeypatch, raw):
     monkeypatch.setenv("RATE_LIMIT_ANALYSES_PER_HOUR", raw)
     with pytest.raises(ValueError, match="RATE_LIMIT_ANALYSES_PER_HOUR"):
         rate_limit_per_hour_from_env()
+
+
+def test_the_try_limit_defaults_to_sixty(monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_TRY_PER_HOUR", raising=False)
+    assert rate_limit_try_per_hour_from_env() == DEFAULT_TRY_RATE_LIMIT == 60
+
+
+def test_the_try_limit_can_be_configured_and_disabled(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_TRY_PER_HOUR", "25")
+    assert rate_limit_try_per_hour_from_env() == 25
+    monkeypatch.setenv("RATE_LIMIT_TRY_PER_HOUR", "0")
+    assert rate_limit_try_per_hour_from_env() == 0
+
+
+@pytest.mark.parametrize("raw", ["sixty", "-1", ""])
+def test_an_invalid_try_limit_is_rejected(monkeypatch, raw):
+    monkeypatch.setenv("RATE_LIMIT_TRY_PER_HOUR", raw)
+    with pytest.raises(ValueError, match="RATE_LIMIT_TRY_PER_HOUR"):
+        rate_limit_try_per_hour_from_env()
 
 
 def test_trusted_proxies_default_to_loopback(monkeypatch):

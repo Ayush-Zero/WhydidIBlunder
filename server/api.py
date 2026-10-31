@@ -1,4 +1,4 @@
-"""Phase 2 C1–C7: the game list, analysis, polling, cancel, report, explain, and limits.
+"""Phase 2 C1–C7 plus Phase 3 A1/D1: games, jobs, reports, positions, and try grading.
 
 ``GET /api/player/{username}/games`` is a thin, normalised view over
 :mod:`server.chesscom`. It exists so the browser never talks to Chess.com
@@ -24,12 +24,19 @@ worker stored. It is a pure read: no engine, no Chess.com fetch, no reshaping.
 stored report's SANs into FENs and phase labels for the review board. It is a
 pure read of the report and does not launch Stockfish.
 
+``POST /api/games/{game_key}/try`` is the Phase 3 D1 grader. It reconstructs the
+selected position, validates the candidate SAN, and searches only the resulting
+position at the stored report's depth. The report supplies the before-eval and
+the best line; configured thresholds decide the label. A client cannot send a
+FEN, a depth or a threshold.
+
 ``POST /api/explain`` is a Phase 2 stub. It accepts the Phase 5 LLM input shape
 and returns a placeholder; no provider keys, prompts or LLM calls live here yet.
 
-``POST /api/analyze`` is rate limited per client IP. ``X-Forwarded-For`` is
-trusted only from a configured proxy, and the rightmost entry is used because
-that is the one the proxy appended.
+``POST /api/analyze`` and ``POST /api/games/{game_key}/try`` have separate
+per-client-IP limits. ``X-Forwarded-For`` is trusted only from a configured
+proxy, and the rightmost entry is used because that is the one the proxy
+appended.
 
 Three decisions worth stating:
 
@@ -70,6 +77,13 @@ from server.chesscom import (
 )
 from server.positions import ReportReplayError, replay_report
 from server.ratelimit import client_ip
+from server.try_grader import (
+    TryBusyError,
+    TryEngineError,
+    TryPositionError,
+    TryReportError,
+    prepare_try,
+)
 
 __all__ = [
     "api_router",
@@ -83,6 +97,8 @@ __all__ = [
     "JobStatus",
     "PlayerSummary",
     "ReviewPosition",
+    "TryRequest",
+    "TryResponse",
 ]
 
 #: Chess.com usernames are letters, digits, ``_`` and ``-``. Constraining the
@@ -232,20 +248,13 @@ def _client(request: Request) -> ChessComClient:
     return request.app.state.chesscom
 
 
-def _enforce_rate_limit(request: Request, response: Response) -> None:
-    """Apply C7's per-IP limit to one analysis request.
-
-    This runs before any Chess.com lookup, so an over-limit caller cannot spend
-    upstream requests or Stockfish time. The key is the client IP, with
-    ``X-Forwarded-For`` trusted only when the immediate peer is a configured
-    proxy (see :mod:`server.ratelimit`).
-
-    Every valid-body analyze request counts, including one that reuses a stored
-    report or fails upstream: those still consume API capacity, and counting
-    them keeps the rule simple. A malformed body is rejected by FastAPI before
-    this function runs, so it cannot be used to burn another client's quota.
-    """
-    limiter = getattr(request.app.state, "rate_limiter", None)
+def _apply_rate_limit(
+    request: Request,
+    response: Response,
+    limiter,
+    detail: str,
+) -> None:
+    """Record one request against ``limiter`` and set the shared headers."""
     if limiter is None or not limiter.enabled:
         return
 
@@ -261,14 +270,31 @@ def _enforce_rate_limit(request: Request, response: Response) -> None:
     }
     if not decision.allowed:
         headers["Retry-After"] = str(decision.retry_after)
-        raise HTTPException(
-            status_code=429,
-            detail="rate limit exceeded; try again later",
-            headers=headers,
-        )
+        raise HTTPException(status_code=429, detail=detail, headers=headers)
 
     for name, value in headers.items():
         response.headers[name] = value
+
+
+def _enforce_rate_limit(request: Request, response: Response) -> None:
+    """Apply C7's per-IP limit to one analysis request.
+
+    This runs before any Chess.com lookup, so an over-limit caller cannot spend
+    upstream requests or Stockfish time. The key is the client IP, with
+    ``X-Forwarded-For`` trusted only when the immediate peer is a configured
+    proxy (see :mod:`server.ratelimit`).
+
+    Every valid-body analyze request counts, including one that reuses a stored
+    report or fails upstream: those still consume API capacity, and counting
+    them keeps the rule simple. A malformed body is rejected by FastAPI before
+    this function runs, so it cannot be used to burn another client's quota.
+    """
+    _apply_rate_limit(
+        request,
+        response,
+        getattr(request.app.state, "rate_limiter", None),
+        "rate limit exceeded; try again later",
+    )
 
 
 @api_router.get(
@@ -873,6 +899,156 @@ def get_game_positions(
             for position in replay.positions
         ],
     )
+
+
+# --- Phase 3 D1: try again ------------------------------------------------
+
+
+class TryRequest(BaseModel):
+    """One legal candidate for a flagged ply."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_color: Literal["white", "black"] = Field(
+        ...,
+        description="Which side's stored report to grade against.",
+    )
+    ply: int = Field(
+        ...,
+        ge=1,
+        description="One-based ply from the stored report.",
+    )
+    move_san: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        description="Candidate move in SAN; the server validates it.",
+    )
+
+
+class TryResponse(BaseModel):
+    """The grading result. An illegal candidate is a 422, never this shape."""
+
+    legal: Literal[True] = True
+    accepted: bool
+    classification: Literal["ok", "inaccuracy", "mistake", "blunder"]
+    drop_win_pct: float
+    eval_after_cp: int
+    best_san: str
+    pv_san: list[str]
+    threshold_win_pct: float
+    reason: str
+
+
+@api_router.post(
+    "/games/{game_key:path}/try",
+    response_model=TryResponse,
+    summary="Grade a try-again move against a stored report",
+    responses={
+        404: {"description": "No report for this game and colour."},
+        409: {"description": "The stored report cannot supply a grading baseline."},
+        422: {"description": "Bad ply, wrong colour, or an illegal candidate SAN."},
+        429: {"description": "Try-again rate limit exceeded."},
+        503: {"description": "Database not ready, engine busy, or engine failure."},
+    },
+)
+def try_move(
+    payload: TryRequest,
+    request: Request,
+    response: Response,
+    game_key: str = Path(
+        ...,
+        min_length=1,
+        max_length=2048,
+        description="Opaque key from C1; may contain ':' and '/'.",
+    ),
+) -> TryResponse:
+    """Evaluate one candidate move using the report's own baseline.
+
+    The position is reconstructed from the stored report's SANs, never from a
+    client-supplied FEN. The candidate is parsed by python-chess against that
+    position, so an illegal or ambiguous move is a ``422`` before any engine
+    work. Only the resulting position is searched: the report already contains
+    the before-eval and the best line. The existing precedence ladder (forced,
+    engine best, within 0.2 win%-points, below the inaccuracy threshold) decides
+    acceptance.
+
+    The try limiter is applied **after** these cheap validations. Invalid
+    requests cannot spend engine time, so they neither need nor consume the
+    try bucket; a malformed body is rejected by FastAPI even earlier.
+    """
+    connection = db.connect(request.app.state.db_path)
+    try:
+        try:
+            row = db.get_report(connection, game_key, payload.user_color)
+            body = None if row is None else row["report_json"]
+        except sqlite3.OperationalError as exc:
+            raise HTTPException(
+                status_code=503, detail="database is not ready"
+            ) from exc
+
+        if body is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"no report for game {game_key!r} as {payload.user_color}"
+                ),
+            )
+
+        try:
+            report = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=409, detail="stored report is not valid JSON"
+            ) from exc
+
+        try:
+            prepared = prepare_try(
+                report,
+                user_color=payload.user_color,
+                ply=payload.ply,
+                move_san=payload.move_san,
+            )
+        except ReportReplayError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"stored report cannot be replayed: {exc}",
+            ) from exc
+        except TryPositionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except TryReportError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        _apply_rate_limit(
+            request,
+            response,
+            getattr(request.app.state, "try_rate_limiter", None),
+            "try-again rate limit exceeded; try again later",
+        )
+
+        try:
+            result = request.app.state.try_grader.evaluate(connection, prepared)
+        except TryBusyError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="the try-again engine is busy; try again shortly",
+            ) from exc
+        except TryEngineError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        return TryResponse(
+            legal=True,
+            accepted=result.accepted,
+            classification=result.classification,
+            drop_win_pct=result.drop_win_pct,
+            eval_after_cp=result.eval_after_cp,
+            best_san=result.best_san,
+            pv_san=result.pv_san,
+            threshold_win_pct=result.threshold_win_pct,
+            reason=result.reason,
+        )
+    finally:
+        connection.close()
 
 
 # --- C6: explain one move (stub) -----------------------------------------
