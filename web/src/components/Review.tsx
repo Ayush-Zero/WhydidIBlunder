@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { errorMessage, isApiError, type Side } from '../api'
 import { useReviewData } from '../hooks/useReviewData'
 import { sideLabel } from '../lib/games'
-import { phaseBreakdown, whitePovEval } from '../lib/review'
+import { moveOverlay, phaseBreakdown, whitePovEval } from '../lib/review'
+import { BestLine } from './BestLine'
 import { ErrorState } from './ErrorState'
 import { EvalBar } from './EvalBar'
 import { LoadingState } from './LoadingState'
@@ -19,11 +20,13 @@ interface ReviewProps {
 }
 
 /**
- * The C1 review slice: one report, one board, one grouped move list.
+ * The review screen: one report, one board, one grouped move list.
  *
- * The board shows `fen_before` for the selected ply so C3 can draw arrows on
- * the position the mover actually faced. The large eval bar describes that
- * same visible position; each move row shows the evaluation after its move.
+ * The board shows `fen_before` for the selected ply, with played/best arrows
+ * drawn on the position the mover actually faced. The large eval bar describes
+ * the selected position; each move row shows the evaluation after its move.
+ * Clicking a best-line move previews that PV position without changing the
+ * report selection.
  */
 export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
   const { phase, report, positions, error, retry } = useReviewData(
@@ -31,6 +34,12 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
     userColor,
   )
   const [selectedPly, setSelectedPly] = useState(1)
+  const [pvIndex, setPvIndex] = useState(0)
+
+  function selectPly(ply: number) {
+    setSelectedPly(ply)
+    setPvIndex(0)
+  }
 
   if (phase === 'loading') {
     return (
@@ -88,6 +97,15 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
   }
 
   const evaluation = whitePovEval(move, 'before')
+  const overlay = moveOverlay(position.fen_before, move)
+  const previewIndex = Math.min(
+    pvIndex,
+    overlay.line?.moves.length ?? 0,
+  )
+  const displayedFen =
+    previewIndex > 0 && overlay.line
+      ? (overlay.line.fens[previewIndex] ?? position.fen_before)
+      : position.fen_before
   const userMoves = report.moves.filter(
     (candidate) => candidate.side === report.summary.user_color,
   )
@@ -130,9 +148,22 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
       <ReviewSummary summary={report.summary} phaseCounts={phaseCounts} />
 
       <div className="review-grid">
-        <div className="review-board-row">
-          <EvalBar evaluation={evaluation} />
-          <ReviewBoard fen={position.fen_before} orientation={userColor} />
+        <div className="review-board-column">
+          <div className="review-board-row">
+            <EvalBar evaluation={evaluation} />
+            <ReviewBoard
+              fen={displayedFen}
+              orientation={userColor}
+              arrows={previewIndex === 0 ? overlay.arrows : []}
+            />
+          </div>
+          <BestLine
+            line={overlay.line}
+            error={overlay.error}
+            activeIndex={previewIndex}
+            onSelect={setPvIndex}
+            onReset={() => setPvIndex(0)}
+          />
         </div>
 
         <div className="review-side">
@@ -143,7 +174,7 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
           <MoveList
             moves={report.moves}
             selectedPly={activePly}
-            onSelect={setSelectedPly}
+            onSelect={selectPly}
           />
         </div>
       </div>
@@ -152,7 +183,7 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
         moves={flaggedMoves}
         summary={report.summary}
         selectedPly={activePly}
-        onSelect={setSelectedPly}
+        onSelect={selectPly}
       />
 
       <p className="review-footer">

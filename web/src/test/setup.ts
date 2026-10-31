@@ -13,12 +13,17 @@ vi.mock('react-chessboard', async () => {
     Chessboard: ({
       options,
     }: {
-      options?: { position?: string; boardOrientation?: string }
+      options?: {
+        position?: string
+        boardOrientation?: string
+        arrows?: unknown
+      }
     }) =>
       createElement('div', {
         'data-testid': 'mock-chessboard',
         'data-position': options?.position,
         'data-orientation': options?.boardOrientation,
+        'data-arrows': JSON.stringify(options?.arrows ?? []),
       }),
   }
 })

@@ -1,12 +1,13 @@
-import { Chessboard } from 'react-chessboard'
+import { Chessboard, type Arrow } from 'react-chessboard'
 import type { Side } from '../api'
 
 interface ReviewBoardProps {
   fen: string
   orientation: Side
+  arrows?: Arrow[]
 }
 
-export function ReviewBoard({ fen, orientation }: ReviewBoardProps) {
+export function ReviewBoard({ fen, orientation, arrows }: ReviewBoardProps) {
   return (
     <div className="review-board" data-testid="review-board" data-fen={fen}>
       <Chessboard
@@ -15,6 +16,7 @@ export function ReviewBoard({ fen, orientation }: ReviewBoardProps) {
           boardOrientation: orientation,
           allowDragging: false,
           showAnimations: false,
+          arrows,
         }}
       />
     </div>

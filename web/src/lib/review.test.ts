@@ -3,6 +3,7 @@ import type { MoveEvaluation, ReviewPosition } from '../api'
 import {
   formatEval,
   groupMoves,
+  moveOverlay,
   phaseBreakdown,
   stillAheadNote,
   tagLabel,
@@ -277,6 +278,70 @@ describe('stillAheadNote', () => {
         }),
       ),
     ).toBeNull()
+  })
+})
+
+describe('moveOverlay', () => {
+  const startingFen =
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+  const bd6Fen =
+    'rnb1k1nr/p2p1ppp/8/1pbN1N1P/4PBP1/3P1Q2/PqP5/R4KR1 w kq - 0 18'
+
+  it('derives the played and best arrows and the PV from fen_before', () => {
+    const overlay = moveOverlay(
+      bd6Fen,
+      move({ san: 'Bd6', best_san: 'd4', pv_san: ['d4', 'Bf8'] }),
+    )
+
+    expect(overlay.arrows).toHaveLength(2)
+    expect(overlay.arrows[0]).toMatchObject({
+      startSquare: 'f4',
+      endSquare: 'd6',
+    })
+    expect(overlay.arrows[1]).toMatchObject({
+      startSquare: 'd3',
+      endSquare: 'd4',
+    })
+    expect(overlay.line?.moves).toEqual(['d4', 'Bf8'])
+    expect(overlay.line?.fens[0]).toBe(bd6Fen)
+    expect(overlay.line?.fens).toHaveLength(3)
+    expect(overlay.error).toBeNull()
+  })
+
+  it('draws a played best move once', () => {
+    const overlay = moveOverlay(
+      startingFen,
+      move({ san: 'e4', best_san: 'e4', pv_san: ['e4', 'e5'] }),
+    )
+
+    expect(overlay.arrows).toHaveLength(1)
+    expect(overlay.arrows[0]).toMatchObject({
+      startSquare: 'e2',
+      endSquare: 'e4',
+    })
+  })
+
+  it('labels an unusable best move without dropping the played arrow', () => {
+    const overlay = moveOverlay(
+      startingFen,
+      move({ san: 'e4', best_san: 'Nf6', pv_san: [] }),
+    )
+
+    expect(overlay.arrows).toHaveLength(1)
+    expect(overlay.line).toBeNull()
+    expect(overlay.error).toMatch(/best move is unavailable/i)
+    expect(overlay.error).toMatch(/best line is unavailable/i)
+  })
+
+  it('labels an illegal PV instead of throwing', () => {
+    const overlay = moveOverlay(
+      startingFen,
+      move({ san: 'e4', best_san: 'd4', pv_san: ['d4', 'NotAMove'] }),
+    )
+
+    expect(overlay.arrows).toHaveLength(2)
+    expect(overlay.line).toBeNull()
+    expect(overlay.error).toMatch(/best line is unavailable/i)
   })
 })
 

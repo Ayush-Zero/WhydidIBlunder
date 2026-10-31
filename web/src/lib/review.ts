@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js'
 import type {
   Classification,
   MoveEvaluation,
@@ -100,6 +101,109 @@ export function stillAheadNote(move: MoveEvaluation): string | null {
   if (move.eval_after_win_pct >= 70) return `Still winning (${score})`
   if (move.eval_after_win_pct > 50) return `Still ahead (${score})`
   return null
+}
+
+/** A played or best-move arrow for `react-chessboard`. */
+export interface ReviewArrow {
+  startSquare: string
+  endSquare: string
+  color: string
+}
+
+export interface PvLine {
+  /** Legal SAN moves from the selected position. */
+  moves: string[]
+  /** `fens[i]` is after `i` PV moves; `fens[0]` is the selected position. */
+  fens: string[]
+}
+
+export interface MoveOverlay {
+  arrows: ReviewArrow[]
+  line: PvLine | null
+  /** A visible, non-fatal explanation when the report cannot be drawn. */
+  error: string | null
+}
+
+const PLAYED_ARROW_COLOR = 'rgba(192, 57, 43, 0.85)'
+const BEST_ARROW_COLOR = 'rgba(30, 132, 73, 0.85)'
+
+/**
+ * Draw the played and best moves on `fen_before`, and replay the best line.
+ *
+ * The report stores SAN, not squares, so `chess.js` derives the arrow ends.
+ * A played best move is drawn once (green) to avoid blending two arrows.
+ * Invalid report data becomes a labelled error instead of a thrown exception.
+ */
+export function moveOverlay(
+  fenBefore: string,
+  move: MoveEvaluation,
+): MoveOverlay {
+  const arrows: ReviewArrow[] = []
+  let error: string | null = null
+
+  const played = arrowFor(fenBefore, move.san)
+  if (played) {
+    arrows.push({ ...played, color: PLAYED_ARROW_COLOR })
+  } else {
+    error = 'The played move could not be shown on this position.'
+  }
+
+  const best = arrowFor(fenBefore, move.best_san)
+  if (best) {
+    const sameAsPlayed =
+      played?.startSquare === best.startSquare &&
+      played?.endSquare === best.endSquare
+    if (!sameAsPlayed) {
+      arrows.push({ ...best, color: BEST_ARROW_COLOR })
+    }
+  } else {
+    error = appendProblem(error, 'The best move is unavailable for this position.')
+  }
+
+  const line = pvLine(fenBefore, move.pv_san)
+  if (!line) {
+    error = appendProblem(error, 'The best line is unavailable for this position.')
+  }
+
+  return { arrows, line, error }
+}
+
+interface ArrowSquares {
+  startSquare: string
+  endSquare: string
+}
+
+function arrowFor(fen: string, san: string): ArrowSquares | null {
+  if (!san) return null
+
+  try {
+    const move = new Chess(fen).move(san)
+    return { startSquare: move.from, endSquare: move.to }
+  } catch {
+    return null
+  }
+}
+
+function pvLine(fenBefore: string, moves: string[]): PvLine | null {
+  if (!Array.isArray(moves) || moves.length === 0) return null
+
+  try {
+    const chess = new Chess(fenBefore)
+    const fens = [fenBefore]
+
+    for (const san of moves) {
+      chess.move(san)
+      fens.push(chess.fen())
+    }
+
+    return { moves: [...moves], fens }
+  } catch {
+    return null
+  }
+}
+
+function appendProblem(current: string | null, next: string): string {
+  return current ? `${current} ${next}` : next
 }
 
 /**

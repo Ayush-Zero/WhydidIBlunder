@@ -190,6 +190,108 @@ describe('review', () => {
     expect(screen.getByText(/18\. Bd6/)).toBeInTheDocument()
   })
 
+  it('draws the played and best arrows and steps through the best line', async () => {
+    renderReview()
+    const board = await screen.findByTestId('review-board')
+    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+    const mock = screen.getByTestId('mock-chessboard')
+
+    fireEvent.click(within(list).getByRole('button', { name: /Bd6/ }))
+
+    const arrows = JSON.parse(mock.getAttribute('data-arrows') ?? '[]')
+    expect(arrows).toHaveLength(2)
+    expect(arrows[0]).toMatchObject({ startSquare: 'f4', endSquare: 'd6' })
+    expect(arrows[1]).toMatchObject({ startSquare: 'd3', endSquare: 'd4' })
+    expect(board).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
+
+    const best = screen.getByRole('region', { name: /best line/i })
+    expect(within(best).getByRole('button', { name: 'Reset' })).toBeDisabled()
+
+    fireEvent.click(within(best).getByRole('button', { name: 'Bf8' }))
+
+    expect(board).toHaveAttribute(
+      'data-fen',
+      'rnb1kbnr/p2p1ppp/8/1p1N1N1P/3PPBP1/5Q2/PqP5/R4KR1 w kq - 1 19',
+    )
+    expect(JSON.parse(mock.getAttribute('data-arrows') ?? '[]')).toEqual([])
+    expect(
+      within(best).getByText('Showing best-line move 2 of 6.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(within(best).getByRole('button', { name: 'Reset' }))
+
+    expect(board).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
+    expect(JSON.parse(mock.getAttribute('data-arrows') ?? '[]')).toHaveLength(2)
+  })
+
+  it('resets the PV preview when the selection changes', async () => {
+    renderReview()
+    const board = await screen.findByTestId('review-board')
+    const best = await screen.findByRole('region', { name: /best line/i })
+
+    fireEvent.click(within(best).getByRole('button', { name: 'c5' }))
+    expect(board).not.toHaveAttribute(
+      'data-fen',
+      testPositions.starting_fen,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /White move 8, Nh4/ }),
+    )
+
+    expect(board).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[14].fen_before,
+    )
+    expect(
+      within(screen.getByRole('region', { name: /best line/i })).getByText(
+        'Showing the selected position.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('labels a missing best move and PV instead of crashing', async () => {
+    const report: GameReport = {
+      ...testReport,
+      moves: testReport.moves.map((move) =>
+        move.ply === 35 ? { ...move, best_san: '', pv_san: [] } : move,
+      ),
+    }
+    server.use(
+      http.get('*/api/games/*/report', () => HttpResponse.json(report)),
+    )
+
+    renderReview()
+    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+
+    fireEvent.click(within(list).getByRole('button', { name: /Bd6/ }))
+
+    const best = screen.getByRole('region', { name: /best line/i })
+    expect(
+      within(best).getByText(
+        /best move is unavailable.*best line is unavailable/i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('review-board')).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
+
+    const arrows = JSON.parse(
+      screen.getByTestId('mock-chessboard').getAttribute('data-arrows') ?? '[]',
+    )
+    expect(arrows).toHaveLength(1)
+    expect(arrows[0]).toMatchObject({ startSquare: 'f4', endSquare: 'd6' })
+  })
+
   it('notes a blunder that leaves the player ahead without softening it', async () => {
     const report: GameReport = {
       ...testReport,
