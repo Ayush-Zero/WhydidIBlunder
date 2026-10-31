@@ -1,4 +1,9 @@
-import type { MoveEvaluation } from '../api'
+import type {
+  Classification,
+  MoveEvaluation,
+  Phase,
+  ReviewPosition,
+} from '../api'
 
 /** A position evaluation converted to a consistent White point of view. */
 export interface WhiteEval {
@@ -42,16 +47,59 @@ export function whitePovEval(
 
 /** Human-readable White-POV eval: `+0.3`, `-1.2`, `M5`, `-M5`, or `#`. */
 export function formatEval(evaluation: WhiteEval): string {
-  if (evaluation.terminal) return '#'
+  return formatScore(evaluation.cp, evaluation.mate, evaluation.terminal)
+}
 
-  if (evaluation.mate !== null) {
-    const distance = Math.abs(evaluation.mate)
-    return `${evaluation.mate < 0 ? '-' : ''}M${distance}`
+function formatScore(cp: number, mate: number | null, terminal: boolean): string {
+  if (terminal) return '#'
+
+  if (mate !== null) {
+    const distance = Math.abs(mate)
+    return `${mate < 0 ? '-' : ''}M${distance}`
   }
 
-  const pawns = evaluation.cp / 100
+  const pawns = cp / 100
   const sign = pawns > 0 ? '+' : ''
   return `${sign}${pawns.toFixed(1)}`
+}
+
+/** Format the eval of a reported move from the mover's point of view. */
+function formatMoveEval(move: MoveEvaluation, point: EvalPoint): string {
+  const before = point === 'before'
+  const mate = before ? move.mate_before : move.mate_after
+  const terminal = mate === 0 || (!before && isCheckmateSan(move.san))
+
+  return formatScore(
+    before ? move.eval_before_cp : move.eval_after_cp,
+    mate,
+    terminal,
+  )
+}
+
+/**
+ * A factual note for a mistake/blunder that did not cost the game.
+ *
+ * The engine label is never softened. "Still winning" is reserved for a
+ * decisive advantage (>= 70% win chance or a forced mate); a smaller edge is
+ * "Still ahead". This is the product decision for the `11.Qg3` case: a
+ * 30-point drop that leaves +1.0 is a blunder, but the panel says
+ * "Still ahead (+1.0)".
+ */
+export function stillAheadNote(move: MoveEvaluation): string | null {
+  if (move.classification !== 'blunder' && move.classification !== 'mistake') {
+    return null
+  }
+
+  if (move.mate_after !== null) {
+    return move.mate_after > 0
+      ? `Still winning (${formatMoveEval(move, 'after')})`
+      : null
+  }
+
+  const score = formatMoveEval(move, 'after')
+  if (move.eval_after_win_pct >= 70) return `Still winning (${score})`
+  if (move.eval_after_win_pct > 50) return `Still ahead (${score})`
+  return null
 }
 
 /**
@@ -64,6 +112,69 @@ export function whiteBarPercent(evaluation: WhiteEval): number {
   if (evaluation.terminal) return evaluation.winPct >= 50 ? 100 : 0
   if (evaluation.mate !== null) return evaluation.mate > 0 ? 100 : 0
   return Math.min(98, Math.max(2, evaluation.winPct))
+}
+
+export const CLASSIFICATION_LABELS: Record<Classification, string> = {
+  ok: 'OK',
+  inaccuracy: 'Inaccuracy',
+  mistake: 'Mistake',
+  blunder: 'Blunder',
+}
+
+const TAG_LABELS: Record<string, string> = {
+  missed_mate: 'Missed mate',
+  allowed_mate: 'Allowed mate',
+  hanging_piece: 'Hanging piece',
+  missed_capture: 'Missed capture',
+  fork: 'Fork',
+  pin: 'Pin',
+}
+
+/** Human-readable label for an analyzer tag; unknown tags are humanised. */
+export function tagLabel(tag: string): string {
+  return TAG_LABELS[tag] ?? tag.replaceAll('_', ' ')
+}
+
+export interface PhaseCounts {
+  phase: Phase
+  blunders: number
+  mistakes: number
+  inaccuracies: number
+}
+
+/**
+ * Count flagged moves by the phase of the position the mover faced.
+ *
+ * The phase comes from the positions endpoint, never from the move number:
+ * `detect_phase` has one implementation and it is on the server.
+ */
+export function phaseBreakdown(
+  moves: MoveEvaluation[],
+  positions: ReviewPosition[],
+): PhaseCounts[] {
+  const phaseByPly = new Map(
+    positions.map((position) => [position.ply, position.phase]),
+  )
+  const rows: PhaseCounts[] = [
+    { phase: 'opening', blunders: 0, mistakes: 0, inaccuracies: 0 },
+    { phase: 'middlegame', blunders: 0, mistakes: 0, inaccuracies: 0 },
+    { phase: 'endgame', blunders: 0, mistakes: 0, inaccuracies: 0 },
+  ]
+  const rowByPhase = new Map(rows.map((row) => [row.phase, row]))
+
+  for (const move of moves) {
+    if (move.classification === 'ok') continue
+
+    const phase = phaseByPly.get(move.ply)
+    const row = phase ? rowByPhase.get(phase) : undefined
+    if (!row) continue
+
+    if (move.classification === 'blunder') row.blunders += 1
+    else if (move.classification === 'mistake') row.mistakes += 1
+    else row.inaccuracies += 1
+  }
+
+  return rows
 }
 
 export interface MoveRow {

@@ -9,6 +9,7 @@ import {
   expect,
   it,
 } from 'vitest'
+import type { GameReport } from '../api'
 import { testPositions, testReport } from '../test/handlers'
 import { server, startMockServer, stopMockServer } from '../test/server'
 import { Review } from './Review'
@@ -104,6 +105,117 @@ describe('review', () => {
     fireEvent.keyDown(last, { key: 'Home' })
     expect(first).toHaveFocus()
     expect(board).toHaveAttribute('data-fen', testPositions.starting_fen)
+  })
+
+  it('shows the report summary and phase breakdown', async () => {
+    renderReview()
+    const summary = await screen.findByRole('region', { name: /your summary/i })
+    const reportSummary = testReport.summary
+
+    expect(
+      within(summary).getByText(`${reportSummary.accuracy}%`),
+    ).toBeInTheDocument()
+    expect(
+      within(summary).getByText(String(reportSummary.blunders)),
+    ).toBeInTheDocument()
+    expect(
+      within(summary).getByText(String(reportSummary.mistakes)),
+    ).toBeInTheDocument()
+    expect(
+      within(summary).getByText(String(reportSummary.inaccuracies)),
+    ).toBeInTheDocument()
+
+    expect(within(summary).getByText('Opening')).toBeInTheDocument()
+    expect(within(summary).getByText('2 inaccuracies')).toBeInTheDocument()
+    expect(within(summary).getByText('Middlegame')).toBeInTheDocument()
+    expect(within(summary).getByText('1 mistake')).toBeInTheDocument()
+    expect(within(summary).getByText('Endgame')).toBeInTheDocument()
+    expect(within(summary).getByText('No flagged moves')).toBeInTheDocument()
+  })
+
+  it('lists only the user’s flagged moves and their tags', async () => {
+    renderReview()
+    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+
+    expect(within(list).getAllByRole('button')).toHaveLength(3)
+    expect(within(list).getByText('Nh4')).toBeInTheDocument()
+    expect(within(list).getByText('g4')).toBeInTheDocument()
+    expect(within(list).getByText('Bd6')).toBeInTheDocument()
+    expect(within(list).queryByText('Na6')).not.toBeInTheDocument()
+    expect(within(list).getByText('Fork')).toBeInTheDocument()
+  })
+
+  it('filters flagged moves by classification', async () => {
+    renderReview()
+    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const all = within(panel).getByRole('button', { name: /^All/ })
+    const mistakes = within(panel).getByRole('button', { name: /^Mistakes/ })
+
+    expect(all).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(mistakes)
+    expect(mistakes).toHaveAttribute('aria-pressed', 'true')
+
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+    expect(within(list).getAllByRole('button')).toHaveLength(1)
+    expect(within(list).getByText('Bd6')).toBeInTheDocument()
+
+    fireEvent.click(within(panel).getByRole('button', { name: /^Blunders/ }))
+    expect(
+      within(panel).getByText(/no blunders in this game/i),
+    ).toBeInTheDocument()
+    expect(
+      within(panel).queryByRole('list', { name: /flagged moves/i }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(all)
+    const restored = within(panel).getByRole('list', { name: /flagged moves/i })
+    expect(within(restored).getAllByRole('button')).toHaveLength(3)
+  })
+
+  it('selects the ply when a flagged move is clicked', async () => {
+    renderReview()
+    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+    const bd6 = within(list).getByRole('button', { name: /Bd6/ })
+
+    fireEvent.click(bd6)
+
+    expect(screen.getByTestId('review-board')).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[34].fen_before,
+    )
+    expect(bd6).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByText(/18\. Bd6/)).toBeInTheDocument()
+  })
+
+  it('notes a blunder that leaves the player ahead without softening it', async () => {
+    const report: GameReport = {
+      ...testReport,
+      moves: testReport.moves.map((move) =>
+        move.ply === 35
+          ? {
+              ...move,
+              classification: 'blunder',
+              eval_after_cp: 100,
+              eval_after_win_pct: 60,
+              mate_after: null,
+            }
+          : move,
+      ),
+      summary: { ...testReport.summary, blunders: 1, mistakes: 0 },
+    }
+    server.use(
+      http.get('*/api/games/*/report', () => HttpResponse.json(report)),
+    )
+
+    renderReview()
+    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const list = within(panel).getByRole('list', { name: /flagged moves/i })
+
+    expect(within(list).getByText('Still ahead (+1.0)')).toBeInTheDocument()
+    expect(within(list).getByText('Blunder')).toBeInTheDocument()
   })
 
   it('shows a recoverable error when the report is missing', async () => {

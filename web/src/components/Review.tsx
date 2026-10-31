@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import { errorMessage, isApiError, type Side } from '../api'
 import { useReviewData } from '../hooks/useReviewData'
 import { sideLabel } from '../lib/games'
-import { whitePovEval } from '../lib/review'
+import { phaseBreakdown, whitePovEval } from '../lib/review'
 import { ErrorState } from './ErrorState'
 import { EvalBar } from './EvalBar'
 import { LoadingState } from './LoadingState'
+import { MistakesPanel } from './MistakesPanel'
 import { MoveList } from './MoveList'
 import { ReviewBoard } from './ReviewBoard'
+import { ReviewSummary } from './ReviewSummary'
 
 interface ReviewProps {
   gameKey: string
@@ -86,6 +88,13 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
   }
 
   const evaluation = whitePovEval(move, 'before')
+  const userMoves = report.moves.filter(
+    (candidate) => candidate.side === report.summary.user_color,
+  )
+  const flaggedMoves = userMoves.filter(
+    (candidate) => candidate.classification !== 'ok',
+  )
+  const phaseCounts = phaseBreakdown(userMoves, positions.positions)
 
   return (
     <section className="review" aria-labelledby="review-title">
@@ -118,6 +127,8 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
         </div>
       </dl>
 
+      <ReviewSummary summary={report.summary} phaseCounts={phaseCounts} />
+
       <div className="review-grid">
         <div className="review-board-row">
           <EvalBar evaluation={evaluation} />
@@ -136,6 +147,13 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
           />
         </div>
       </div>
+
+      <MistakesPanel
+        moves={flaggedMoves}
+        summary={report.summary}
+        selectedPly={activePly}
+        onSelect={setSelectedPly}
+      />
 
       <p className="review-footer">
         <Link className="text-link" to={gamesPath}>

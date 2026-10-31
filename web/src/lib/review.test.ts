@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import type { MoveEvaluation, Side } from '../api'
+import type { MoveEvaluation, ReviewPosition } from '../api'
 import {
   formatEval,
   groupMoves,
+  phaseBreakdown,
+  stillAheadNote,
+  tagLabel,
   whiteBarPercent,
   whitePovEval,
 } from './review'
 
-function move(overrides: Partial<MoveEvaluation> & { side: Side }): MoveEvaluation {
+function move(overrides: Partial<MoveEvaluation>): MoveEvaluation {
   return {
     ply: 1,
     move_number: 1,
+    side: 'white',
     san: 'e4',
     best_san: 'e4',
     pv_san: [],
@@ -168,5 +172,118 @@ describe('groupMoves', () => {
       white: { san: 'Nf3' },
       black: null,
     })
+  })
+})
+
+describe('phaseBreakdown', () => {
+  it('counts flagged moves by the position phase, not the move number', () => {
+    const moves = [
+      move({ ply: 1, move_number: 1, classification: 'blunder' }),
+      move({ ply: 2, move_number: 1, classification: 'mistake' }),
+      move({ ply: 3, move_number: 2, classification: 'inaccuracy' }),
+      move({ ply: 4, move_number: 2, classification: 'ok' }),
+    ]
+    const positions: ReviewPosition[] = [
+      { ply: 1, fen_before: '', fen_after: '', phase: 'endgame' },
+      { ply: 2, fen_before: '', fen_after: '', phase: 'endgame' },
+      { ply: 3, fen_before: '', fen_after: '', phase: 'opening' },
+      { ply: 4, fen_before: '', fen_after: '', phase: 'opening' },
+    ]
+
+    expect(phaseBreakdown(moves, positions)).toEqual([
+      { phase: 'opening', blunders: 0, mistakes: 0, inaccuracies: 1 },
+      { phase: 'middlegame', blunders: 0, mistakes: 0, inaccuracies: 0 },
+      { phase: 'endgame', blunders: 1, mistakes: 1, inaccuracies: 0 },
+    ])
+  })
+
+  it('ignores moves with no matching position', () => {
+    const rows = phaseBreakdown(
+      [move({ ply: 9, classification: 'blunder' })],
+      [],
+    )
+
+    expect(rows.every((row) => row.blunders === 0)).toBe(true)
+  })
+})
+
+describe('stillAheadNote', () => {
+  it('calls a decisive post-move advantage winning', () => {
+    expect(
+      stillAheadNote(
+        move({
+          classification: 'blunder',
+          eval_after_cp: 300,
+          eval_after_win_pct: 80,
+        }),
+      ),
+    ).toBe('Still winning (+3.0)')
+  })
+
+  it('uses "still ahead" for the 11.Qg3 +1.0 case', () => {
+    expect(
+      stillAheadNote(
+        move({
+          classification: 'blunder',
+          eval_after_cp: 100,
+          eval_after_win_pct: 60,
+        }),
+      ),
+    ).toBe('Still ahead (+1.0)')
+  })
+
+  it('does not soften a move that leaves the player behind', () => {
+    expect(
+      stillAheadNote(
+        move({
+          classification: 'blunder',
+          eval_after_cp: -200,
+          eval_after_win_pct: 30,
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it('only annotates mistakes and blunders', () => {
+    const evaluation = {
+      eval_after_cp: 300,
+      eval_after_win_pct: 80,
+    }
+
+    expect(
+      stillAheadNote(move({ classification: 'inaccuracy', ...evaluation })),
+    ).toBeNull()
+    expect(
+      stillAheadNote(move({ classification: 'ok', ...evaluation })),
+    ).toBeNull()
+  })
+
+  it('recognises a forced mate and ignores being mated', () => {
+    expect(
+      stillAheadNote(
+        move({
+          classification: 'mistake',
+          mate_after: 3,
+          eval_after_win_pct: 100,
+        }),
+      ),
+    ).toBe('Still winning (M3)')
+    expect(
+      stillAheadNote(
+        move({
+          classification: 'blunder',
+          mate_after: -3,
+          eval_after_win_pct: 0,
+        }),
+      ),
+    ).toBeNull()
+  })
+})
+
+describe('tagLabel', () => {
+  it('turns report tags into readable labels', () => {
+    expect(tagLabel('missed_capture')).toBe('Missed capture')
+    expect(tagLabel('fork')).toBe('Fork')
+    expect(tagLabel('new_tag')).toBe('new tag')
   })
 })
