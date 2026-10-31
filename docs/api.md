@@ -9,9 +9,10 @@ behind each endpoint; the OpenAPI schema is the field-by-field source of truth.
 > (ownership / abuse model) is documented in
 > [`docs/ownership.md`](ownership.md). Milestone C is complete.
 >
-> **Phase 3:** A1 (positions and phase labels), D1 (server-side try-again
-> grading), and D2 (try-again UI) are implemented. The browser harness and final
-> hardening notes are Milestones D3–D5.
+> **Phase 3:** complete. A1 (positions and phase labels), D1 (server-side
+> try-again grading), D2 (try-again UI), D3 (component/integration harness) and
+> D4 (Playwright browser coverage) are implemented. D5 records the final
+> ownership, safety, CORS and deployment notes.
 
 ---
 
@@ -638,10 +639,11 @@ all callers share Caddy's bucket, which over-limits rather than bypasses.
 
 ## Not here yet
 
-No Phase 3 endpoint remains. Milestone C is complete; C8's ownership and abuse
-model is documented in [`docs/ownership.md`](ownership.md). Milestones D1 and D2
-are complete; the browser harness and final hardening notes are still in
-progress.
+No Phase 3 endpoint remains. Milestone C, A1 and D1-D4 are complete; D5's
+ownership, safety, CORS and deployment notes are in
+[`docs/ownership.md`](ownership.md) and
+[`docs/safety-review.md`](safety-review.md). The browser never sends a FEN,
+depth, engine path or provider key; the server reconstructs every position.
 
 The breakdown writes `game_uuid` for C2/C5; the identifier is **`game_key`**
 for the reason above — not every game has a `uuid`, and the database is keyed on

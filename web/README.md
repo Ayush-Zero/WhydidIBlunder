@@ -12,7 +12,7 @@ npm test           # Vitest, offline
 npm run test:e2e   # Playwright, offline
 npm run lint       # oxlint
 npm run build      # type-check + production bundle
-npm run preview    # serve the production build
+npm run preview    # serve the built dist/ (proxy the API separately)
 ```
 
 ## API boundary
@@ -30,6 +30,29 @@ Copy-Item .env.example .env.local
 For a split production deployment, build with an absolute
 `VITE_API_BASE_URL`; for the normal deployment, serve the built `dist/` from the
 same origin as the API and leave the default in place.
+
+## Production deployment
+
+`npm run build` writes a static `dist/`. Serve it from a reverse proxy (for
+example Caddy) and proxy `/api/*` and `/health` to the FastAPI origin. The React
+router uses history URLs, so unmatched application paths must fall back to
+`index.html`; do not fall back API paths.
+
+- **Same origin:** leave `VITE_API_BASE_URL=/api` at build time. No CORS origin
+  is needed because the browser never makes a cross-origin request; set
+  `CORS_ORIGINS=` explicitly to keep the allowlist empty.
+- **Split origin:** rebuild with the API's absolute base URL (for example
+  `https://api.example.com/api`) and list the frontend origin in
+  `CORS_ORIGINS`. `allow_credentials` stays off; the API permits only `GET` and
+  `POST`, and exposes the rate-limit headers browsers need.
+- **Proxy controls:** terminate TLS at the proxy, set `TRUSTED_PROXY_IPS` to the
+  proxy network, and apply a global request/body-size limit. The FastAPI
+  per-IP rate limits are per process and do not replace a proxy limit.
+- The build contains no engine binary and no provider key. `VITE_*` values are
+  public by definition; never put a secret in `.env.local`.
+
+See [`docs/ownership.md`](../docs/ownership.md) for the full ownership, CORS and
+deployment requirements.
 
 ## Current state
 
