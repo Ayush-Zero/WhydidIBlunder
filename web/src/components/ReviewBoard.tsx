@@ -9,7 +9,13 @@ interface ReviewBoardProps {
 
 export function ReviewBoard({ fen, orientation, arrows }: ReviewBoardProps) {
   return (
-    <div className="review-board" data-testid="review-board" data-fen={fen}>
+    <div
+      className="review-board"
+      data-testid="review-board"
+      data-fen={fen}
+      inert
+      aria-hidden="true"
+    >
       <Chessboard
         options={{
           position: fen,

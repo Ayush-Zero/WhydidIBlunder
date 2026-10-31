@@ -8,9 +8,9 @@ import { BestLine } from './BestLine'
 import { ErrorState } from './ErrorState'
 import { EvalBar } from './EvalBar'
 import { LoadingState } from './LoadingState'
-import { MistakesPanel } from './MistakesPanel'
-import { MoveList } from './MoveList'
 import { ReviewBoard } from './ReviewBoard'
+import { ReviewNav } from './ReviewNav'
+import { ReviewPanels } from './ReviewPanels'
 import { ReviewSummary } from './ReviewSummary'
 
 interface ReviewProps {
@@ -145,8 +145,6 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
         </div>
       </dl>
 
-      <ReviewSummary summary={report.summary} phaseCounts={phaseCounts} />
-
       <div className="review-grid">
         <div className="review-board-column">
           <div className="review-board-row">
@@ -171,20 +169,22 @@ export function Review({ gameKey, userColor, gamesPath }: ReviewProps) {
             {move.move_number}
             {move.side === 'white' ? '.' : '…'} {move.san}
           </p>
-          <MoveList
+          <ReviewNav
             moves={report.moves}
+            selectedPly={activePly}
+            onSelect={selectPly}
+          />
+          <ReviewPanels
+            moves={report.moves}
+            flaggedMoves={flaggedMoves}
+            summary={report.summary}
             selectedPly={activePly}
             onSelect={selectPly}
           />
         </div>
       </div>
 
-      <MistakesPanel
-        moves={flaggedMoves}
-        summary={report.summary}
-        selectedPly={activePly}
-        onSelect={selectPly}
-      />
+      <ReviewSummary summary={report.summary} phaseCounts={phaseCounts} />
 
       <p className="review-footer">
         <Link className="text-link" to={gamesPath}>

@@ -34,6 +34,11 @@ function renderReview() {
   )
 }
 
+async function openMistakesPanel() {
+  fireEvent.click(await screen.findByRole('tab', { name: /^Mistakes/ }))
+  return screen.findByRole('region', { name: /your mistakes/i })
+}
+
 describe('review', () => {
   it('renders every ply from the golden report', async () => {
     renderReview()
@@ -52,6 +57,14 @@ describe('review', () => {
     const moves = screen.getAllByRole('button', { name: /move \d+/i })
     expect(moves).toHaveLength(testReport.moves.length)
     expect(moves).toHaveLength(45)
+  })
+
+  it('keeps the decorative board out of the tab order', async () => {
+    renderReview()
+    const board = await screen.findByTestId('review-board')
+
+    expect(board).toHaveAttribute('aria-hidden', 'true')
+    expect(board).toHaveAttribute('inert')
   })
 
   it('keeps the board and the move list in sync', async () => {
@@ -107,6 +120,62 @@ describe('review', () => {
     expect(board).toHaveAttribute('data-fen', testPositions.starting_fen)
   })
 
+  it('steps through plies with previous and next controls', async () => {
+    renderReview()
+    const board = await screen.findByTestId('review-board')
+    const previous = screen.getByRole('button', { name: 'Previous move' })
+    const next = screen.getByRole('button', { name: 'Next move' })
+
+    expect(previous).toBeDisabled()
+
+    fireEvent.click(next)
+    expect(board).toHaveAttribute(
+      'data-fen',
+      testPositions.positions[1].fen_before,
+    )
+    expect(previous).toBeEnabled()
+
+    fireEvent.click(previous)
+    expect(board).toHaveAttribute('data-fen', testPositions.starting_fen)
+  })
+
+  it('switches between the move list and mistakes tabs', async () => {
+    renderReview()
+    const movesTab = await screen.findByRole('tab', { name: 'Moves' })
+    const mistakesTab = screen.getByRole('tab', { name: /^Mistakes/ })
+
+    expect(movesTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel', { name: 'Moves' })).toBeVisible()
+    expect(
+      screen.queryByRole('tabpanel', { name: /^Mistakes/ }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(mistakesTab)
+
+    expect(mistakesTab).toHaveAttribute('aria-selected', 'true')
+    expect(
+      await screen.findByRole('region', { name: /your mistakes/i }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('tabpanel', { name: 'Moves' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('moves between tabs with the keyboard', async () => {
+    renderReview()
+    const movesTab = await screen.findByRole('tab', { name: 'Moves' })
+    movesTab.focus()
+
+    fireEvent.keyDown(movesTab, { key: 'ArrowRight' })
+    const mistakesTab = screen.getByRole('tab', { name: /^Mistakes/ })
+    expect(mistakesTab).toHaveFocus()
+    expect(mistakesTab).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(mistakesTab, { key: 'Home' })
+    expect(movesTab).toHaveFocus()
+    expect(movesTab).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('shows the report summary and phase breakdown', async () => {
     renderReview()
     const summary = await screen.findByRole('region', { name: /your summary/i })
@@ -135,7 +204,7 @@ describe('review', () => {
 
   it('lists only the user’s flagged moves and their tags', async () => {
     renderReview()
-    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const panel = await openMistakesPanel()
     const list = within(panel).getByRole('list', { name: /flagged moves/i })
 
     expect(within(list).getAllByRole('button')).toHaveLength(3)
@@ -148,7 +217,7 @@ describe('review', () => {
 
   it('filters flagged moves by classification', async () => {
     renderReview()
-    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const panel = await openMistakesPanel()
     const all = within(panel).getByRole('button', { name: /^All/ })
     const mistakes = within(panel).getByRole('button', { name: /^Mistakes/ })
 
@@ -176,7 +245,7 @@ describe('review', () => {
 
   it('selects the ply when a flagged move is clicked', async () => {
     renderReview()
-    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const panel = await openMistakesPanel()
     const list = within(panel).getByRole('list', { name: /flagged moves/i })
     const bd6 = within(list).getByRole('button', { name: /Bd6/ })
 
@@ -193,7 +262,7 @@ describe('review', () => {
   it('draws the played and best arrows and steps through the best line', async () => {
     renderReview()
     const board = await screen.findByTestId('review-board')
-    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const panel = await openMistakesPanel()
     const list = within(panel).getByRole('list', { name: /flagged moves/i })
     const mock = screen.getByTestId('mock-chessboard')
 
@@ -269,7 +338,7 @@ describe('review', () => {
     )
 
     renderReview()
-    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const panel = await openMistakesPanel()
     const list = within(panel).getByRole('list', { name: /flagged moves/i })
 
     fireEvent.click(within(list).getByRole('button', { name: /Bd6/ }))
@@ -313,7 +382,7 @@ describe('review', () => {
     )
 
     renderReview()
-    const panel = await screen.findByRole('region', { name: /your mistakes/i })
+    const panel = await openMistakesPanel()
     const list = within(panel).getByRole('list', { name: /flagged moves/i })
 
     expect(within(list).getByText('Still ahead (+1.0)')).toBeInTheDocument()

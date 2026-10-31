@@ -899,6 +899,7 @@
 
 .review-header h2 {
   margin-bottom: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 3vw, 1.8rem);
   line-height: 1.15;
@@ -1097,9 +1098,65 @@
 
 .review-move-label {
   margin: 0;
+  overflow-wrap: anywhere;
   color: var(--ink-muted);
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
+}
+
+.review-nav {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.review-nav .button {
+  flex: 1;
+}
+
+.review-panels {
+  min-width: 0;
+}
+
+.review-tabs {
+  display: flex;
+  gap: 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-tab {
+  min-height: 2.5rem;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  background: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-tab:hover {
+  color: var(--ink);
+}
+
+.review-tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+.review-tab span {
+  margin-left: 0.2rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.review-tabpanel {
+  padding-top: var(--space-2);
+}
+
+.review-tabpanel .mistakes-panel {
+  margin-top: 0;
 }
 
 .move-list {
@@ -1171,7 +1228,7 @@
 /* --- Review summary and mistakes (C2) ------------------------------------ */
 
 .review-summary {
-  margin-bottom: var(--space-4);
+  margin-top: var(--space-4);
   padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
