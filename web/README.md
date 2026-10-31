@@ -9,6 +9,7 @@ does not download an engine and never talks to Chess.com directly.
 npm install
 npm run dev        # Vite dev server on http://localhost:5173
 npm test           # Vitest, offline
+npm run test:e2e   # Playwright, offline
 npm run lint       # oxlint
 npm run build      # type-check + production bundle
 npm run preview    # serve the production build
@@ -69,3 +70,21 @@ handlers instead of live services. The analysis lifecycle tests pair MSW with
 fake timers, and `src/hooks/useAnalysisJob.test.tsx` uses fake timers and a
 mocked client to pin the polling scheduler. No test requires the API, the
 worker, Stockfish or Chess.com.
+
+`npm run test:e2e` runs Playwright in Chromium against Vite with the same
+recorded API fixtures routed in the browser. Install the browser once with
+`npx playwright install chromium`. The suite covers the full
+discovery → analysis → review → try-again journey, cancellation, and a durable
+report reload without a backend or network.
+
+The full-stack browser smoke is opt-in:
+
+```powershell
+$env:RUN_LIVE_TESTS='1'
+npm run test:e2e -- e2e/live.spec.ts
+Remove-Item Env:RUN_LIVE_TESTS
+```
+
+It starts the real API and a real worker with Stockfish through
+`scripts/e2e_live_app.py`; Chess.com is still the recorded fixture. See
+[`docs/testing.md`](../docs/testing.md) for the harness details.

@@ -22,6 +22,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
+      // Playwright owns e2e/; Vitest must not try to execute those specs.
+      include: ['src/**/*.{test,spec}.{ts,tsx}'],
       css: false,
       passWithNoTests: true,
       restoreMocks: true,

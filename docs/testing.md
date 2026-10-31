@@ -71,6 +71,44 @@ typed transport client, fixture-parsing and error-mapping tests, the shell error
 boundary, and shared loading/empty/error states. The component and mocked-API
 suites grow with the screens in Phase 3.
 
+### Browser E2E
+
+The Playwright suite drives the real browser bundle against the recorded API
+fixtures. It is offline and engine-free by default:
+
+```powershell
+cd web
+npm install
+npx playwright install chromium   # once per machine
+npm run test:e2e
+```
+
+`web/playwright.config.ts` starts Vite on port 4173. The test routes `/api` and
+`/health` through `page.route`, so no API process, worker, Stockfish or Chess.com
+request is involved. `journey.spec.ts` covers search → game list → analyze →
+progress → report → mistake → arrows/PV → try-again, cancellation with the saved
+prefix, and a durable report reload. Progress is held until the test releases it;
+the suite waits on UI state rather than fixed sleeps. Traces and screenshots for
+failures land in `web/test-results/`.
+
+### The opt-in full-stack browser smoke
+
+`live.spec.ts` is skipped unless `RUN_LIVE_TESTS=1`. It uses the real FastAPI app,
+a separate real worker process and Stockfish; only Chess.com is served from the
+recorded fixtures, so it remains deterministic and network-free:
+
+```powershell
+$env:RUN_LIVE_TESTS='1'
+cd web
+npm run test:e2e -- e2e/live.spec.ts
+Remove-Item Env:RUN_LIVE_TESTS   # back to the offline suite
+```
+
+`scripts/e2e_live_app.py` boots the API on port 8001 with the fixture transport,
+starts the worker when the browser queues the four-ply game, and lets Vite proxy
+to it. It needs the repository `.venv` and `STOCKFISH_PATH` just like the Python
+live tests. `E2E_PYTHON` can override the interpreter path.
+
 ## What the suite protects
 
 | Layer | File | Guards against |
@@ -93,6 +131,8 @@ suites grow with the screens in Phase 3.
 | Service E2E (opt-in) | `tests/test_e2e_service.py` | the C2 → worker → C3 → C5 spine breaking: a job that never runs, a report that does not validate or is reshaped by the API, or a finished report being requeued |
 | Cancel E2E (opt-in) | `tests/test_e2e_cancel.py` | a cancel being ignored, a stopped job writing a report, partial plies lost, or a Stockfish process orphaned after the worker exits |
 | Reaper E2E | `tests/test_e2e_reaper.py` | a killed worker leaving a job `running` forever, a reaped job losing its partial plies, or a retry reusing the dead worker's attempt |
+| Browser journey | `web/e2e/journey.spec.ts` | routing, review and cancel breaking in a real browser against the mocked contract; a reload losing the durable report link |
+| Browser live smoke (opt-in) | `web/e2e/live.spec.ts` | the browser, API, worker and Stockfish failing to agree on one real analysis |
 
 ## The golden fixture
 
